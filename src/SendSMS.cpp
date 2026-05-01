@@ -48,12 +48,6 @@ TinyGsm modem(debugger);
 TinyGsm modem(SerialAT);
 #endif
 
-
-// It depends on the operator whether to set up an APN. If some operators do not set up an APN,
-// they will be rejected when registering for the network. You need to ask the local operator for the specific APN.
-// APNs from other operators are welcome to submit PRs for filling.
-//#define NETWORK_APN     "ctlte"             //ctlte: China Telecom
-
 void setup()
 {
     Serial.begin(115200);
@@ -171,6 +165,16 @@ void setup()
     // Default charset: IRA (ASCII). handleSMS switches to UCS2 for reading.
     modem.sendAT("+CSCS=\"IRA\"");
     modem.waitResponse();
+    
+    // Send power-on notification
+    log_i("Sending power-on notification...");
+    String powerOnMsg = "Device powered on";
+    
+    if (modem.sendSMS(SMS_TARGET, powerOnMsg)) {
+        log_i("[OK] Power-on SMS sent successfully");
+    } else {
+        log_i("[ERROR] Failed to send power-on SMS");
+    }
 }
 
 // Send a potentially long message as one or more 160-character SMS parts.
@@ -216,6 +220,48 @@ bool sendLongSMS(const String &number, const String &text)
         while (offset < (int)text.length() && text[offset] == ' ') offset++;
     }
     return true;
+}
+
+
+
+// It depends on the operator whether to set up an APN. If some operators do not set up an APN,
+// they will be rejected when registering for the network. You need to ask the local operator for the specific APN.
+// APNs from other operators are welcome to submit PRs for filling.
+//#define NETWORK_APN     "ctlte"             //ctlte: China Telecom
+
+// Detect if device is powered by battery or USB
+// Returns true if battery is detected, false if USB only
+bool isPoweredByBattery()
+{
+#ifdef BOARD_BAT_ADC_PIN
+    // Read battery voltage multiple times and average for stability
+    int samples = 10;
+    int sum = 0;
+    for (int i = 0; i < samples; i++) {
+        sum += analogRead(BOARD_BAT_ADC_PIN);
+        delay(10);
+    }
+    int avgValue = sum / samples;
+    
+    // If ADC is 0, battery switch is off
+    if (avgValue == 0) {
+        return false;
+    }
+    
+    // ESP32 ADC: 0-4095 maps to 0-3.3V
+    // Battery divider circuit typically steps down higher voltage
+    // Threshold: ~2000 ADC (roughly 1.6V) distinguishes battery from USB
+    // Battery: typically 3.0-4.2V (after divider: ~1500-2100 ADC)
+    // USB only: typically lower ADC reading (~500-1000 ADC)
+    int threshold = 2300;
+    char msg[100];
+    sprintf(msg, "Battery ADC: %d (threshold: %d)", avgValue, threshold);
+    log_i("%s", msg);
+    // sendLongSMS(SMS_TARGET, msg);
+    return avgValue < threshold;
+#else
+    return false;
+#endif
 }
 
 // Returns true if s is a non-empty hex UCS-2 string: only [0-9A-Fa-f], length divisible by 4.
@@ -409,6 +455,7 @@ void handleSMS() {
             // Check if this is a send command from SMS_TARGET:
             // Format: "FOR:<number> <message body>"
             String smsTextUpper = smsText;
+            smsTextUpper.trim();
             smsTextUpper.toUpperCase();
             bool forwarded = true;
             if (smsNumber == SMS_TARGET && smsTextUpper.startsWith("FOR:")) {
@@ -444,6 +491,29 @@ void handleSMS() {
                     log_i("[ERROR] FOR: command missing number or message body");
                     modem.sendSMS(SMS_TARGET, "ERROR: FOR: command missing number or message body");
                 }
+            } else if (smsNumber == SMS_TARGET && smsTextUpper == "STATUS") {
+                // Handle status query
+                log_i("[CMD] Status query received");
+                
+                // Read battery ADC value
+                int samples = 10;
+                int sum = 0;
+                for (int i = 0; i < samples; i++) {
+                    sum += analogRead(BOARD_BAT_ADC_PIN);
+                    delay(10);
+                }
+                int adcValue = sum / samples;
+                int threshold = 2358;
+                
+                bool isBattery = isPoweredByBattery();
+                String powerSource = isBattery ? "Battery" : "USB";
+                
+                String statusMsg = "Status: ADC=" + String(adcValue) + 
+                                   " Threshold=" + String(threshold) + 
+                                   " Power=" + powerSource;
+                
+                log_i("[CMD] %s", statusMsg.c_str());
+                modem.sendSMS(SMS_TARGET, statusMsg);
             } else {
                 // Normal incoming SMS — send header and body in IRA/text mode
                 String headerMessage = "Fwd from: " + smsNumber + "\nTime: " + smsTimestamp;
@@ -483,6 +553,37 @@ void loop()
     if (millis() - lastCheck > 2000) {
         lastCheck = millis();
         handleSMS();
+    }
+
+    // Check battery level every minute
+    static unsigned long lastBatteryCheck = 0;
+    static bool batteryAlertSent = false;
+    static bool usbAlertSent = false;
+    if (millis() - lastBatteryCheck > 60000) {  // Check every 60 seconds
+        lastBatteryCheck = millis();
+        if (isPoweredByBattery()) {
+            if (!batteryAlertSent) {
+                log_i("Battery power detected, sending SMS...");
+                if (modem.sendSMS(SMS_TARGET, "Device is now on battery power")) {
+                    log_i("[OK] Battery alert SMS sent successfully");
+                    batteryAlertSent = true;
+                    usbAlertSent = false;
+                } else {
+                    log_i("[ERROR] Failed to send battery alert SMS");
+                }
+            }
+        } else {
+            if (!usbAlertSent && batteryAlertSent) {
+                log_i("Back on USB power, sending SMS...");
+                if (modem.sendSMS(SMS_TARGET, "Device is now on USB power")) {
+                    log_i("[OK] USB alert SMS sent successfully");
+                    usbAlertSent = true;
+                } else {
+                    log_i("[ERROR] Failed to send USB alert SMS");
+                }
+            }
+            batteryAlertSent = false;
+        }
     }
 
     if (SerialAT.available()) {

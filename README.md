@@ -8,6 +8,4 @@ Also, if you send it a message starting by "for:" followed by another number the
 
 But this only works for messages sent from *your* phone, to avoid other people sending messages.
 
-This allows you to not miss any message in case your SMS enabled home automation system gets an unexpected message (from
-the provider, or because you are repurposing an old SIM card, or whatever mischief you are about to commit), and you can answer 
-from your phone as if it were from the number it was sent to.
+This allows you to not miss any message in case your SMS enabled home automation system gets an unexpected message (from the provider, or because you are repurposing an old SIM card, or whatever mischief you are about to commit), and you can answer from your phone as if it were from the number it was sent to.

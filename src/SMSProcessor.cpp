@@ -16,7 +16,7 @@ void SMSProcessor::process(const ReceivedSMS &sms)
     } else if (textUpper == "STATUS") {
         handleStatusCommand();
     } else if (textUpper == "LIST") {
-        handleListCommand();
+        handleListCommand(sms.index);
     } else if (textUpper.startsWith("READ ")) {
         int index = sms.text.substring(5).toInt();
         if (index > 0) {
@@ -67,23 +67,6 @@ void SMSProcessor::handleForCommand(const String &rest)
     }
 }
 
-void SMSProcessor::handleListCommand()
-{
-    log_i("[CMD] List query received");
-    int found = 0;
-    String listMsg = "";
-    for (int i = 1; i <= 30; i++) {
-        ReceivedSMS sms;
-        if (!_reader.readAt(i, sms)) continue;
-        found++;
-        listMsg += "[" + String(sms.index) + "] " + sms.number + "\n";
-    }
-    if (found == 0) {
-        _sender.send(_targetNumber, "No messages stored");
-    } else {
-        _sender.send(_targetNumber, listMsg);
-    }
-}
 
 void SMSProcessor::handleReadCommand(int index)
 {
@@ -124,6 +107,33 @@ void SMSProcessor::handleStatusCommand()
 
     log_i("[CMD] %s", statusMsg.c_str());
     _sender.send(_targetNumber, statusMsg);
+}
+
+void SMSProcessor::handleListCommand(int skipIndex)
+{
+    log_i("[CMD] List query received");
+
+    const int maxEntries = 6;
+    const int maxScanIndex = 30;
+    int found = 0;
+    String response = "Messages:";
+
+    for (int i = 1; i <= maxScanIndex && found < maxEntries; i++) {
+        if (i == skipIndex) continue;
+
+        ReceivedSMS sms;
+        if (!_reader.readAt(i, sms)) continue;
+
+        found++;
+        response += "\n[" + String(sms.index) + "] " + sms.number;
+    }
+
+    if (found == 0) {
+        _sender.send(_targetNumber, "No messages stored");
+        return;
+    }
+
+    _sender.send(_targetNumber, response);
 }
 
 

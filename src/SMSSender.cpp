@@ -1,5 +1,27 @@
 #include "SMSSender.h"
 
+String SMSSender::normalizeMojibake(const String &text)
+{
+    String fixed = text;
+
+    // Common UTF-8/Latin-1 mojibake sequences seen with some SMS modem paths.
+
+    // Repair common mojibake: UTF-8 bytes decoded as Latin-1 and then re-encoded as UTF-8.
+    const char badCedilla[] = { (char)0xC3, (char)0x83, (char)0xC2, (char)0xA7, 0 };
+    const char badEAcute[]  = { (char)0xC3, (char)0x83, (char)0xC2, (char)0xA9, 0 };
+    const char badEGrave[]  = { (char)0xC3, (char)0x83, (char)0xC2, (char)0xA8, 0 };
+
+    const char goodCedilla[] = { (char)0xC3, (char)0xA7, 0 };
+    const char goodEAcute[]  = { (char)0xC3, (char)0xA9, 0 };
+    const char goodEGrave[]  = { (char)0xC3, (char)0xA8, 0 };
+
+    fixed.replace(badCedilla, goodCedilla);
+    fixed.replace(badEAcute, goodEAcute);
+    fixed.replace(badEGrave, goodEGrave);
+
+    return fixed;
+}
+
 SMSSender::SMSSender(TinyGsm &modem, Stream &serialAT)
     : _modem(modem), _serialAT(serialAT) {}
 
@@ -13,10 +35,12 @@ bool SMSSender::needsUCS2(const String &utf8)
 
 bool SMSSender::send(const String &number, const String &text)
 {
-    if (needsUCS2(text)) {
-        return sendLongSMS_UCS2(number, utf8ToUCS2Hex(text));
+    String normalized = normalizeMojibake(text);
+
+    if (needsUCS2(normalized)) {
+        return sendLongSMS_UCS2(number, utf8ToUCS2Hex(normalized));
     }
-    return sendLongSMS(number, text);
+    return sendLongSMS(number, normalized);
 }
 
 bool SMSSender::sendLongSMS(const String &number, const String &text)

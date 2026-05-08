@@ -8,6 +8,19 @@
 // NullStream: a Stream that always reports no bytes available
 class NullStream : public Stream {};
 
+// CaptureStream records outbound PDU text written by SMSSender UCS2 path.
+class CaptureStream : public Stream {
+public:
+    std::string captured;
+
+    void print(const String &s) override { captured += s.c_str(); }
+    void print(const char *s) override { if (s) captured += s; }
+    size_t write(uint8_t b) override {
+        captured.push_back((char)b);
+        return 1;
+    }
+};
+
 // Shared mock hardware object — reused across all tests
 static TinyGsm g_modem;
 
@@ -45,6 +58,18 @@ void test_utf8ToUCS2Hex_2byte_utf8() {
     // "é" (U+00E9) — UTF-8: 0xC3 0xA9 → "00E9"
     String result = SMSSender::utf8ToUCS2Hex("\xC3\xA9");
     TEST_ASSERT_EQUAL_STRING("00E9", result.c_str());
+}
+
+void test_utf8ToUCS2Hex_2byte_utf8_egrave() {
+    // "è" (U+00E8) — UTF-8: 0xC3 0xA8 → "00E8"
+    String result = SMSSender::utf8ToUCS2Hex("\xC3\xA8");
+    TEST_ASSERT_EQUAL_STRING("00E8", result.c_str());
+}
+
+void test_utf8ToUCS2Hex_2byte_utf8_ccedilla() {
+    // "ç" (U+00E7) — UTF-8: 0xC3 0xA7 → "00E7"
+    String result = SMSSender::utf8ToUCS2Hex("\xC3\xA7");
+    TEST_ASSERT_EQUAL_STRING("00E7", result.c_str());
 }
 
 void test_utf8ToUCS2Hex_3byte_utf8() {
@@ -100,6 +125,18 @@ void test_decodeUCS2Hex_latin1_char() {
     TEST_ASSERT_EQUAL_STRING("\xC3\xA9", result.c_str());
 }
 
+void test_decodeUCS2Hex_latin1_egrave_char() {
+    // "00E8" → UTF-8 "è" (0xC3 0xA8)
+    String result = SMSReader::decodeUCS2Hex("00E8");
+    TEST_ASSERT_EQUAL_STRING("\xC3\xA8", result.c_str());
+}
+
+void test_decodeUCS2Hex_latin1_ccedilla_char() {
+    // "00E7" → UTF-8 "ç" (0xC3 0xA7)
+    String result = SMSReader::decodeUCS2Hex("00E7");
+    TEST_ASSERT_EQUAL_STRING("\xC3\xA7", result.c_str());
+}
+
 void test_decodeUCS2Hex_3byte_utf8_char() {
     // "20AC" → UTF-8 "€" (0xE2 0x82 0xAC)
     String result = SMSReader::decodeUCS2Hex("20AC");
@@ -117,6 +154,31 @@ void test_decodeUCS2Hex_roundtrip_with_utf8ToUCS2Hex() {
     String hex    = SMSSender::utf8ToUCS2Hex(original);
     String decoded = SMSReader::decodeUCS2Hex(hex);
     TEST_ASSERT_EQUAL_STRING(original, decoded.c_str());
+}
+
+void test_send_normalizes_mojibake_eacute_to_single_uCS2_codepoint() {
+    CaptureStream stream;
+    SMSSender sender(g_modem, stream);
+
+    const char mojibakeEAcute[] = { (char)0xC3, (char)0x83, (char)0xC2, (char)0xA9, 0 };
+    bool sent = sender.send("+1111", String(mojibakeEAcute));
+
+    TEST_ASSERT_TRUE(sent);
+    TEST_ASSERT_TRUE(stream.captured.find("00E9") != std::string::npos);
+    TEST_ASSERT_TRUE(stream.captured.find("00C3008300C200A9") == std::string::npos);
+}
+
+void test_send_normalizes_mojibake_egrave_pair_to_two_uCS2_codepoints() {
+    CaptureStream stream;
+    SMSSender sender(g_modem, stream);
+
+    const char mojibakeEAcute[] = { (char)0xC3, (char)0x83, (char)0xC2, (char)0xA9, 0 };
+    const char mojibakeEGrave[] = { (char)0xC3, (char)0x83, (char)0xC2, (char)0xA8, 0 };
+    String text = String(mojibakeEAcute) + String(mojibakeEGrave);
+    bool sent = sender.send("+1111", text);
+
+    TEST_ASSERT_TRUE(sent);
+    TEST_ASSERT_TRUE(stream.captured.find("00E900E8") != std::string::npos);
 }
 
 // =========================================================================
@@ -347,6 +409,8 @@ int main(int, char **) {
     // SMSSender::utf8ToUCS2Hex
     RUN_TEST(test_utf8ToUCS2Hex_ascii);
     RUN_TEST(test_utf8ToUCS2Hex_2byte_utf8);
+    RUN_TEST(test_utf8ToUCS2Hex_2byte_utf8_egrave);
+    RUN_TEST(test_utf8ToUCS2Hex_2byte_utf8_ccedilla);
     RUN_TEST(test_utf8ToUCS2Hex_3byte_utf8);
     RUN_TEST(test_utf8ToUCS2Hex_mixed);
 
@@ -361,9 +425,13 @@ int main(int, char **) {
     // SMSReader::decodeUCS2Hex
     RUN_TEST(test_decodeUCS2Hex_ascii_word);
     RUN_TEST(test_decodeUCS2Hex_latin1_char);
+    RUN_TEST(test_decodeUCS2Hex_latin1_egrave_char);
+    RUN_TEST(test_decodeUCS2Hex_latin1_ccedilla_char);
     RUN_TEST(test_decodeUCS2Hex_3byte_utf8_char);
     RUN_TEST(test_decodeUCS2Hex_invalid_passthrough);
     RUN_TEST(test_decodeUCS2Hex_roundtrip_with_utf8ToUCS2Hex);
+    RUN_TEST(test_send_normalizes_mojibake_eacute_to_single_uCS2_codepoint);
+    RUN_TEST(test_send_normalizes_mojibake_egrave_pair_to_two_uCS2_codepoints);
 
     // SMSProcessor
     RUN_TEST(test_processor_status_command);

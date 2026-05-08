@@ -17,7 +17,7 @@ public:
 private:
     void handleForCommand(const String &rest);
     void handleStatusCommand();
-    void handleListCommand();
+    void handleListCommand(int skipIndex);
     void handleReadCommand(int index);
     void handleDeleteCommand(int index);
 

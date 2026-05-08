@@ -17,6 +17,9 @@ public:
     static bool needsUCS2(const String &utf8);
 
 private:
+    // Repair common UTF-8/Latin-1 mojibake sequences before encoding.
+    static String normalizeMojibake(const String &text);
+
     // IRA path: plain text, 160 chars/part.
     bool sendLongSMS(const String &number, const String &text);
     // UCS-2 path: PDU mode (AT+CMGF=0), 70 chars/part.

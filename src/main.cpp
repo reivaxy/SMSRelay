@@ -44,13 +44,15 @@ TinyGsm modem(SerialAT);
 #include "SMSReader.h"
 #include "SMSForwarder.h"
 #include "SMSProcessor.h"
+#include "BatteryProcessor.h"
 #include "SerialConsole.h"
 
-SMSSender    sender(modem, SerialAT);
-SMSReader    reader(modem, SerialAT);
-SMSForwarder forwarder(sender, SMS_TARGET);
-SMSProcessor processor(sender, SMS_TARGET, reader);
-SerialConsole console(reader, forwarder);
+SMSSender        sender(modem, SerialAT);
+SMSReader        reader(modem, SerialAT);
+SMSForwarder     forwarder(sender, SMS_TARGET);
+SMSProcessor     processor(sender, SMS_TARGET, reader);
+BatteryProcessor batteryProcessor(sender, SMS_TARGET);
+SerialConsole    console(reader, forwarder);
 
 void setup()
 {
@@ -184,26 +186,6 @@ void setup()
 
 
 
-void handleSMS()
-{
-    ReceivedSMS sms;
-    if (!reader.readNext(sms)) return;
-
-    bool forwarded;
-    if (sms.number == SMS_TARGET) {
-        processor.process(sms);
-        forwarded = true;
-    } else {
-        forwarded = forwarder.forward(sms);
-    }
-
-    if ( forwarded) {
-        reader.deleteMessage(sms.index);
-    } else {
-        log_i("[INFO] SMS at index %d kept as read (forward failed)", sms.index);
-    }
-}
-
 void loop()
 {
     // Check for Serial console commands
@@ -213,67 +195,11 @@ void loop()
     static unsigned long lastCheck = 0;
     if (millis() - lastCheck > 2000) {
         lastCheck = millis();
-        handleSMS();
+        reader.check(SMS_TARGET, processor, forwarder);
     }
 
     // Check battery level every minute
-    static unsigned long lastBatteryCheck = 0;
-    static bool batteryAlertSent = false;
-    static bool usbAlertSent = false;
-    static bool nearEmptyAlertSent = false;
-    static int  lastAlertADC = 0;
-    if (millis() - lastBatteryCheck > 60000) {
-        lastBatteryCheck = millis();
-        int adcValue = SMSProcessor::readBatADC();
-        if (adcValue > 0 && adcValue < SMSProcessor::BAT_ADC_THRESHOLD) {
-            if (adcValue < SMSProcessor::BAT_ADC_NEAR_EMPTY_THRESHOLD && !nearEmptyAlertSent) {
-                log_i("Battery near empty (ADC=%d), sending SMS...", adcValue);
-                if (sender.send(SMS_TARGET, "Battery near empty (ADC=" + String(adcValue) + ")")) {
-                    log_i("[OK] Battery near empty SMS sent successfully");
-                    nearEmptyAlertSent = true;
-                    lastAlertADC = adcValue;
-                } else {
-                    log_i("[ERROR] Failed to send battery near empty SMS");
-                }
-            } else if (!batteryAlertSent) {
-                log_i("Battery power detected (ADC=%d), sending SMS...", adcValue);
-                if (sender.send(SMS_TARGET, "Device is now on battery power (ADC=" + String(adcValue) + ")")) {
-                    log_i("[OK] Battery alert SMS sent successfully");
-                    batteryAlertSent = true;
-                    usbAlertSent = false;
-                    lastAlertADC = adcValue;
-                } else {
-                    log_i("[ERROR] Failed to send battery alert SMS");
-                }
-            } else if (lastAlertADC - adcValue >= 20) {
-                // Use this to find out the best value for BAT_ADC_NEAR_EMPTY_THRESHOLD
-                // log_i("Battery level dropped (ADC=%d, last alert ADC=%d), sending SMS...", adcValue, lastAlertADC);
-                // if (sender.send(SMS_TARGET, "Battery level dropped (ADC=" + String(adcValue) + ")")) {
-                //     log_i("[OK] Battery drop SMS sent successfully");
-                //     lastAlertADC = adcValue;
-                // } else {
-                //     log_i("[ERROR] Failed to send battery drop SMS");
-                // }
-            }
-        } else {
-            if (!usbAlertSent && batteryAlertSent) {
-                log_i("Back on USB power, sending SMS...");
-                if (sender.send(SMS_TARGET, "Device is now on USB power")) {
-                    log_i("[OK] USB alert SMS sent successfully");
-                    usbAlertSent = true;
-                } else {
-                    log_i("[ERROR] Failed to send USB alert SMS");
-                }
-            }
-            batteryAlertSent = false;
-            nearEmptyAlertSent = false;
-            lastAlertADC = 0;
-        }
-    }
-
-    if (SerialAT.available()) {
-        Serial.write(SerialAT.read());
-    }
+    batteryProcessor.check();
     delay(100);
 }
 

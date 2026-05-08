@@ -3,6 +3,10 @@
 #include "utilities.h"
 #include <TinyGsmClient.h>
 
+// Forward declarations to avoid circular includes
+class SMSProcessor;
+class SMSForwarder;
+
 struct ReceivedSMS {
     String number;
     String text;
@@ -25,6 +29,9 @@ public:
 
     // Deletes the SMS at the given modem index.
     void deleteMessage(int index);
+
+    // Reads the next SMS, dispatches it to processor or forwarder, and deletes on success.
+    void check(const String &targetNumber, SMSProcessor &processor, SMSForwarder &forwarder);
 
     static bool isHexUCS2(const String &s);
     static String decodeUCS2Hex(const String &s);

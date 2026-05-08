@@ -13,14 +13,6 @@ public:
     // (caller should delete it regardless of individual command success).
     void process(const ReceivedSMS &sms);
 
-    // Returns the averaged raw ADC value from BOARD_BAT_ADC_PIN (0 if pin not defined).
-    static int readBatADC();
-
-    // Returns true if the device is powered by battery (via ADC reading).
-    static bool isPoweredByBattery();
-
-    static constexpr int BAT_ADC_THRESHOLD           = 2300;
-    static constexpr int BAT_ADC_NEAR_EMPTY_THRESHOLD  = 1800;
 
 private:
     void handleForCommand(const String &rest);

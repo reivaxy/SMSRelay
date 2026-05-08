@@ -1,4 +1,6 @@
 #include "SMSReader.h"
+#include "SMSProcessor.h"
+#include "SMSForwarder.h"
 
 SMSReader::SMSReader(TinyGsm &modem, Stream &serialAT)
     : _modem(modem), _serialAT(serialAT) {}
@@ -193,4 +195,24 @@ void SMSReader::deleteMessage(int index)
     _modem.sendAT(GF("+CMGD="), index);
     _modem.waitResponse(2000);
     log_i("[OK] SMS at index %d deleted", index);
+}
+
+void SMSReader::check(const String &targetNumber, SMSProcessor &processor, SMSForwarder &forwarder)
+{
+    ReceivedSMS sms;
+    if (!readNext(sms)) return;
+
+    bool forwarded;
+    if (sms.number == targetNumber) {
+        processor.process(sms);
+        forwarded = true;
+    } else {
+        forwarded = forwarder.forward(sms);
+    }
+
+    if (forwarded) {
+        deleteMessage(sms.index);
+    } else {
+        log_i("[INFO] SMS at index %d kept as read (forward failed)", sms.index);
+    }
 }

@@ -1,4 +1,5 @@
 #include "SMSProcessor.h"
+#include "BatteryProcessor.h"
 #include "utilities.h"
 
 SMSProcessor::SMSProcessor(SMSSender &sender, const String &targetNumber, SMSReader &reader)
@@ -110,12 +111,12 @@ void SMSProcessor::handleStatusCommand()
     log_i("[CMD] Status query received");
 
 #ifdef BOARD_BAT_ADC_PIN
-    int adcValue = readBatADC();
-    bool isBattery = (adcValue > 0 && adcValue < BAT_ADC_THRESHOLD);
+    int adcValue = BatteryProcessor::readBatADC();
+    bool isBattery = (adcValue > 0 && adcValue < BatteryProcessor::BAT_ADC_THRESHOLD);
     String powerSource = isBattery ? "Battery" : "USB";
 
     String statusMsg = "Status: ADC=" + String(adcValue) +
-                       " Threshold=" + String(BAT_ADC_THRESHOLD) +
+                       " Threshold=" + String(BatteryProcessor::BAT_ADC_THRESHOLD) +
                        " Power=" + powerSource;
 #else
     String statusMsg = "Status: No battery ADC";
@@ -125,23 +126,4 @@ void SMSProcessor::handleStatusCommand()
     _sender.send(_targetNumber, statusMsg);
 }
 
-int SMSProcessor::readBatADC()
-{
-#ifdef BOARD_BAT_ADC_PIN
-    int sum = 0;
-    for (int i = 0; i < 10; i++) {
-        sum += analogRead(BOARD_BAT_ADC_PIN);
-        delay(10);
-    }
-    return sum / 10;
-#else
-    return 0;
-#endif
-}
 
-bool SMSProcessor::isPoweredByBattery()
-{
-    int adcValue = readBatADC();
-    log_i("Battery ADC: %d (threshold: %d)", adcValue, BAT_ADC_THRESHOLD);
-    return adcValue > 0 && adcValue < BAT_ADC_THRESHOLD;
-}

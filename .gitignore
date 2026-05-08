@@ -3,3 +3,4 @@ include/secret.h
 .vscode/*
 
 SMSRelay.code-workspace
+*.gcov

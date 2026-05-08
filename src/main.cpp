@@ -45,7 +45,7 @@ TinyGsm modem(SerialAT);
 #include "SMSForwarder.h"
 #include "SMSProcessor.h"
 
-SMSSender    sender(modem);
+SMSSender    sender(modem, SerialAT);
 SMSReader    reader(modem, SerialAT);
 SMSForwarder forwarder(sender, SMS_TARGET);
 SMSProcessor processor(sender, SMS_TARGET);

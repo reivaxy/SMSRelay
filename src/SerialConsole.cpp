@@ -79,7 +79,7 @@ void SerialConsole::handleList()
     int found = 0;
     for (int i = 1; i <= 30; i++) {
         ReceivedSMS sms;
-        if (!_reader.readAt(i, sms)) break;
+        if (!_reader.readAt(i, sms)) continue;
         found++;
         // Build a short preview: first ~6 words or 40 chars, whichever is shorter
         String preview = sms.text;

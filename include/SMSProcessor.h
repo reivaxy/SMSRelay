@@ -19,13 +19,15 @@ public:
     // Returns true if the device is powered by battery (via ADC reading).
     static bool isPoweredByBattery();
 
-    static constexpr int BAT_ADC_THRESHOLD = 2300;
+    static constexpr int BAT_ADC_THRESHOLD           = 2300;
+    static constexpr int BAT_ADC_NEAR_EMPTY_THRESHOLD  = 1800;
 
 private:
     void handleForCommand(const String &rest);
     void handleStatusCommand();
     void handleListCommand();
     void handleReadCommand(int index);
+    void handleDeleteCommand(int index);
 
     SMSSender &_sender;
     String     _targetNumber;

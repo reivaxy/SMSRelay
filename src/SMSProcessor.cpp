@@ -23,6 +23,13 @@ void SMSProcessor::process(const ReceivedSMS &sms)
         } else {
             _sender.send(_targetNumber, "ERROR: read: invalid index");
         }
+    } else if (textUpper.startsWith("DELETE ")) {
+        int index = sms.text.substring(7).toInt();
+        if (index > 0) {
+            handleDeleteCommand(index);
+        } else {
+            _sender.send(_targetNumber, "ERROR: delete: invalid index");
+        }
     }
 }
 
@@ -66,7 +73,7 @@ void SMSProcessor::handleListCommand()
     String listMsg = "";
     for (int i = 1; i <= 30; i++) {
         ReceivedSMS sms;
-        if (!_reader.readAt(i, sms)) break;
+        if (!_reader.readAt(i, sms)) continue;
         found++;
         listMsg += "[" + String(sms.index) + "] " + sms.number + "\n";
     }
@@ -89,6 +96,13 @@ void SMSProcessor::handleReadCommand(int index)
                  "\nTime: " + sms.timestamp +
                  "\n" + sms.text;
     _sender.send(_targetNumber, msg);
+}
+
+void SMSProcessor::handleDeleteCommand(int index)
+{
+    log_i("[CMD] Delete query for index %d", index);
+    _reader.deleteMessage(index);
+    _sender.send(_targetNumber, "OK: Message " + String(index) + " deleted");
 }
 
 void SMSProcessor::handleStatusCommand()

@@ -220,18 +220,40 @@ void loop()
     static unsigned long lastBatteryCheck = 0;
     static bool batteryAlertSent = false;
     static bool usbAlertSent = false;
+    static bool nearEmptyAlertSent = false;
+    static int  lastAlertADC = 0;
     if (millis() - lastBatteryCheck > 60000) {
         lastBatteryCheck = millis();
-        if (SMSProcessor::isPoweredByBattery()) {
-            if (!batteryAlertSent) {
-                log_i("Battery power detected, sending SMS...");
-                if (sender.send(SMS_TARGET, "Device is now on battery power")) {
+        int adcValue = SMSProcessor::readBatADC();
+        if (adcValue > 0 && adcValue < SMSProcessor::BAT_ADC_THRESHOLD) {
+            if (adcValue < SMSProcessor::BAT_ADC_NEAR_EMPTY_THRESHOLD && !nearEmptyAlertSent) {
+                log_i("Battery near empty (ADC=%d), sending SMS...", adcValue);
+                if (sender.send(SMS_TARGET, "Battery near empty (ADC=" + String(adcValue) + ")")) {
+                    log_i("[OK] Battery near empty SMS sent successfully");
+                    nearEmptyAlertSent = true;
+                    lastAlertADC = adcValue;
+                } else {
+                    log_i("[ERROR] Failed to send battery near empty SMS");
+                }
+            } else if (!batteryAlertSent) {
+                log_i("Battery power detected (ADC=%d), sending SMS...", adcValue);
+                if (sender.send(SMS_TARGET, "Device is now on battery power (ADC=" + String(adcValue) + ")")) {
                     log_i("[OK] Battery alert SMS sent successfully");
                     batteryAlertSent = true;
                     usbAlertSent = false;
+                    lastAlertADC = adcValue;
                 } else {
                     log_i("[ERROR] Failed to send battery alert SMS");
                 }
+            } else if (lastAlertADC - adcValue >= 20) {
+                // Use this to find out the best value for BAT_ADC_NEAR_EMPTY_THRESHOLD
+                // log_i("Battery level dropped (ADC=%d, last alert ADC=%d), sending SMS...", adcValue, lastAlertADC);
+                // if (sender.send(SMS_TARGET, "Battery level dropped (ADC=" + String(adcValue) + ")")) {
+                //     log_i("[OK] Battery drop SMS sent successfully");
+                //     lastAlertADC = adcValue;
+                // } else {
+                //     log_i("[ERROR] Failed to send battery drop SMS");
+                // }
             }
         } else {
             if (!usbAlertSent && batteryAlertSent) {
@@ -244,6 +266,8 @@ void loop()
                 }
             }
             batteryAlertSent = false;
+            nearEmptyAlertSent = false;
+            lastAlertADC = 0;
         }
     }
 

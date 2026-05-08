@@ -148,7 +148,6 @@ bool SMSReader::readAt(int index, ReceivedSMS &sms)
     _modem.waitResponse(500);
 
     if (buffer.indexOf("+CMGR:") == -1) {
-        log_i("[WARN] No SMS at index %d", index);
         return false;
     }
 

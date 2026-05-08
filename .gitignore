@@ -2,3 +2,5 @@ include/secret.h
 .pio/*
 .vscode/*
 
+SMSRelay.code-workspace
+*.gcov

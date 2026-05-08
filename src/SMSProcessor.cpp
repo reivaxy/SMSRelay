@@ -1,8 +1,8 @@
 #include "SMSProcessor.h"
 #include "utilities.h"
 
-SMSProcessor::SMSProcessor(SMSSender &sender, const String &targetNumber)
-    : _sender(sender), _targetNumber(targetNumber) {}
+SMSProcessor::SMSProcessor(SMSSender &sender, const String &targetNumber, SMSReader &reader)
+    : _sender(sender), _targetNumber(targetNumber), _reader(reader) {}
 
 void SMSProcessor::process(const ReceivedSMS &sms)
 {
@@ -14,6 +14,15 @@ void SMSProcessor::process(const ReceivedSMS &sms)
         handleForCommand(sms.text.substring(4));
     } else if (textUpper == "STATUS") {
         handleStatusCommand();
+    } else if (textUpper == "LIST") {
+        handleListCommand();
+    } else if (textUpper.startsWith("READ ")) {
+        int index = sms.text.substring(5).toInt();
+        if (index > 0) {
+            handleReadCommand(index);
+        } else {
+            _sender.send(_targetNumber, "ERROR: read: invalid index");
+        }
     }
 }
 
@@ -48,6 +57,38 @@ void SMSProcessor::handleForCommand(const String &rest)
         log_i("[ERROR] FOR: command missing number or message body");
         _sender.send(_targetNumber, "ERROR: FOR: command missing number or message body");
     }
+}
+
+void SMSProcessor::handleListCommand()
+{
+    log_i("[CMD] List query received");
+    int found = 0;
+    String listMsg = "";
+    for (int i = 1; i <= 30; i++) {
+        ReceivedSMS sms;
+        if (!_reader.readAt(i, sms)) break;
+        found++;
+        listMsg += "[" + String(sms.index) + "] " + sms.number + "\n";
+    }
+    if (found == 0) {
+        _sender.send(_targetNumber, "No messages stored");
+    } else {
+        _sender.send(_targetNumber, listMsg);
+    }
+}
+
+void SMSProcessor::handleReadCommand(int index)
+{
+    log_i("[CMD] Read query for index %d", index);
+    ReceivedSMS sms;
+    if (!_reader.readAt(index, sms)) {
+        _sender.send(_targetNumber, "ERROR: No message at index " + String(index));
+        return;
+    }
+    String msg = "[" + String(sms.index) + "] From: " + sms.number +
+                 "\nTime: " + sms.timestamp +
+                 "\n" + sms.text;
+    _sender.send(_targetNumber, msg);
 }
 
 void SMSProcessor::handleStatusCommand()

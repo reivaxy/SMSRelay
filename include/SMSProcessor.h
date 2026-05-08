@@ -4,10 +4,10 @@
 #include "SMSSender.h"
 
 // Handles command SMS received from SMS_TARGET.
-// Supported commands: "FOR:<number> <message>", "STATUS"
+// Supported commands: "FOR:<number> <message>", "STATUS", "LIST"
 class SMSProcessor {
 public:
-    SMSProcessor(SMSSender &sender, const String &targetNumber);
+    SMSProcessor(SMSSender &sender, const String &targetNumber, SMSReader &reader);
 
     // Processes a command SMS. The original SMS is always considered handled
     // (caller should delete it regardless of individual command success).
@@ -24,7 +24,10 @@ public:
 private:
     void handleForCommand(const String &rest);
     void handleStatusCommand();
+    void handleListCommand();
+    void handleReadCommand(int index);
 
     SMSSender &_sender;
     String     _targetNumber;
+    SMSReader &_reader;
 };

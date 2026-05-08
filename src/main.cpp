@@ -44,11 +44,13 @@ TinyGsm modem(SerialAT);
 #include "SMSReader.h"
 #include "SMSForwarder.h"
 #include "SMSProcessor.h"
+#include "SerialConsole.h"
 
 SMSSender    sender(modem, SerialAT);
 SMSReader    reader(modem, SerialAT);
 SMSForwarder forwarder(sender, SMS_TARGET);
-SMSProcessor processor(sender, SMS_TARGET);
+SMSProcessor processor(sender, SMS_TARGET, reader);
+SerialConsole console(reader, forwarder);
 
 void setup()
 {
@@ -195,7 +197,7 @@ void handleSMS()
         forwarded = forwarder.forward(sms);
     }
 
-    if (forwarded) {
+    if ( forwarded) {
         reader.deleteMessage(sms.index);
     } else {
         log_i("[INFO] SMS at index %d kept as read (forward failed)", sms.index);
@@ -204,6 +206,9 @@ void handleSMS()
 
 void loop()
 {
+    // Check for Serial console commands
+    console.check();
+
     // Check for incoming SMS periodically
     static unsigned long lastCheck = 0;
     if (millis() - lastCheck > 2000) {
@@ -244,9 +249,6 @@ void loop()
 
     if (SerialAT.available()) {
         Serial.write(SerialAT.read());
-    }
-    if (Serial.available()) {
-        SerialAT.write(Serial.read());
     }
     delay(100);
 }

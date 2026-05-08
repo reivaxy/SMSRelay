@@ -19,6 +19,10 @@ public:
     // Switches charset to UCS2 on entry; restores IRA before returning.
     bool readNext(ReceivedSMS &sms);
 
+    // Reads the SMS at a specific modem index (any status). Returns true if found.
+    // Switches charset to UCS2 on entry; restores IRA before returning.
+    bool readAt(int index, ReceivedSMS &sms);
+
     // Deletes the SMS at the given modem index.
     void deleteMessage(int index);
 

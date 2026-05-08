@@ -126,6 +126,69 @@ bool SMSReader::readNext(ReceivedSMS &sms)
     return false;
 }
 
+bool SMSReader::readAt(int index, ReceivedSMS &sms)
+{
+    _modem.sendAT("+CSCS=\"UCS2\"");
+    _modem.waitResponse(500);
+
+    String buffer = "";
+    _modem.sendAT(GF("+CMGR="), index);
+
+    unsigned long startTime = millis();
+    while (millis() - startTime < 3000) {
+        while (_serialAT.available()) {
+            char c = _serialAT.read();
+            buffer += c;
+        }
+        if (buffer.indexOf("OK") != -1 || buffer.indexOf("ERROR") != -1) break;
+        delay(1);
+    }
+
+    _modem.sendAT("+CSCS=\"IRA\"");
+    _modem.waitResponse(500);
+
+    if (buffer.indexOf("+CMGR:") == -1) {
+        log_i("[WARN] No SMS at index %d", index);
+        return false;
+    }
+
+    int headerStart = buffer.indexOf("+CMGR:");
+    int headerEnd   = buffer.indexOf("\n", headerStart);
+    if (headerEnd == -1) return false;
+
+    String header = buffer.substring(headerStart, headerEnd);
+
+    int q1 = header.indexOf('"');
+    int q2 = header.indexOf('"', q1 + 1);
+    int q3 = header.indexOf('"', q2 + 1);
+    int q4 = header.indexOf('"', q3 + 1);
+    int q5 = header.indexOf('"', q4 + 1);
+    int q6 = header.indexOf('"', q5 + 1);
+    int q7 = header.indexOf('"', q6 + 1);
+    int q8 = header.indexOf('"', q7 + 1);
+
+    String number = (q3 != -1 && q4 != -1) ? header.substring(q3 + 1, q4) : "";
+    String timestamp = (q7 != -1 && q8 != -1) ? header.substring(q7 + 1, q8) : "";
+
+    int textStart = headerEnd + 1;
+    int textEnd   = buffer.indexOf("\nOK", textStart);
+    if (textEnd == -1) textEnd = buffer.length();
+    String text = buffer.substring(textStart, textEnd);
+    text.trim();
+
+    if (text.length() == 0) {
+        log_i("[WARN] SMS at index %d has empty body", index);
+        return false;
+    }
+
+    sms.index     = index;
+    sms.textRaw   = text;
+    sms.number    = decodeUCS2Hex(number);
+    sms.timestamp = decodeUCS2Hex(timestamp);
+    sms.text      = decodeUCS2Hex(text);
+    return true;
+}
+
 void SMSReader::deleteMessage(int index)
 {
     _modem.sendAT(GF("+CMGD="), index);

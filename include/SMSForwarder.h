@@ -15,4 +15,7 @@ public:
 private:
     SMSSender &_sender;
     String     _targetNumber;
+    String     _lastSenderNumber;
+    unsigned long _lastForwardTime = 0;
+    static constexpr unsigned long HEADER_SUPPRESS_MS = 10000;
 };

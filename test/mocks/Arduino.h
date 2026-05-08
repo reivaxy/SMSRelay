@@ -167,7 +167,8 @@ inline unsigned long millis() {
     return (ms += 1000); // advance 1s per call so hardware timeout loops always exit
 }
 inline void delay(int) {}
-inline int analogRead(int) { return 0; }
+inline int g_analogReadValue = 0;
+inline int analogRead(int) { return g_analogReadValue; }
 inline void pinMode(int, int) {}
 inline void digitalWrite(int, int) {}
 

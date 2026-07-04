@@ -4,7 +4,8 @@
 #include "SMSSender.h"
 
 // Handles command SMS received from SMS_TARGET.
-// Supported commands: "FOR:<number> <message>", "STATUS", "LIST"
+// Supported commands: "FOR:<number> <message>", "STATUS", "LIST", 
+// "READ <index>", "DELETE <index>".
 class SMSProcessor {
 public:
     SMSProcessor(SMSSender &sender, const String &targetNumber, SMSReader &reader);

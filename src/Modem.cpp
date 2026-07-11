@@ -116,18 +116,46 @@ void Modem::initSerial()
     // Set modem baud
     SerialAT.begin(115200, SERIAL_8N1, MODEM_RX_PIN, MODEM_TX_PIN);
     log_i("Start modem...");
-    delay(3000);
+    
+    // Flush any garbage data from the serial buffer
+    delay(500);
+    flushSerialBuffers();
+    
+    // Give modem extra time to stabilize after power-on
+    delay(MODEM_STABILIZATION_DELAY_MS);
+}
+
+void Modem::flushSerialBuffers()
+{
+    // Clear any pending data in receive buffer
+    while (SerialAT.available()) {
+        SerialAT.read();
+    }
+    SerialAT.flush();
+}
+
+void Modem::powerDownModem()
+{
+    log_i("Powering down modem...");
+    pinMode(BOARD_PWRKEY_PIN, OUTPUT);
+    digitalWrite(BOARD_PWRKEY_PIN, LOW);
+    delay(MODEM_POWERDOWN_TIME_MS);
+    digitalWrite(BOARD_PWRKEY_PIN, HIGH);
+    delay(1000);  // Wait a bit after power-down toggle before next operation
 }
 
 bool Modem::testModem()
 {
     log_i("Testing modem connectivity...");
     
-    const int MAX_ATTEMPTS = 10;
+    // Flush any stale data before testing
+    flushSerialBuffers();
+    
+    const int MAX_ATTEMPTS = 15;
     int attempts = 0;
     
     while (!_modem.testAT(TEST_AT_TIMEOUT) && attempts < MAX_ATTEMPTS) {
-        delay(200);
+        delay(300);  // Increased delay between attempts
         attempts++;
     }
     
@@ -211,6 +239,9 @@ void Modem::configureSMS()
 
 bool Modem::isConnected()
 {
+    // Flush any stale data before checking connection
+    flushSerialBuffers();
+    
     // Test if modem responds to AT commands
     if (!_modem.testAT(TEST_AT_TIMEOUT)) {
         log_w("Modem not responding to AT commands");
@@ -232,10 +263,26 @@ bool Modem::isConnected()
 bool Modem::reconnect()
 {
     log_i("Attempting to reconnect modem...");
-    _initialized = false;   
-   
+    _initialized = false;
+    
+    // Perform a proper power cycle to clear any stale modem state
+    log_i("Performing modem power cycle...");
+    powerDownModem();
+    
+    // Reset the modem hardware by toggling reset pin
+#ifdef MODEM_RESET_PIN
+    log_i("Toggling modem reset pin...");
+    digitalWrite(MODEM_RESET_PIN, !MODEM_RESET_LEVEL);
+    delay(100);
+    digitalWrite(MODEM_RESET_PIN, MODEM_RESET_LEVEL);
+    delay(1000);
+    digitalWrite(MODEM_RESET_PIN, !MODEM_RESET_LEVEL);
+#endif
+    
+    delay(2000);  // Give modem time after power cycle
+    
     if (init()) {
-        log_i("Modem re-initialized successfully");
+        log_i("Modem re-initialized successfully after power cycle");
         return true;
     }
 
@@ -249,16 +296,17 @@ void Modem::checkConnection()
     if (millis() - _lastConnectionCheck < CONNECTION_CHECK_INTERVAL) {
         return;
     }
-    log_i("Checking modem connection...");
     
     _lastConnectionCheck = millis();
 
     if (!isConnected()) {
-        log_w("Modem connection lost, attempting reconnection...");
+        log_w("Modem connection lost at %lu ms, attempting reconnection...", millis());
         if (!reconnect()) {
-            log_e("Failed to reconnect modem");
+            log_e("Failed to reconnect modem - will retry at next interval");
+        } else {
+            log_i("Modem successfully reconnected");
         }
     } else {
-        log_i("Modem connection check: OK");
+        log_d("Modem connection check: OK");
     }
 }

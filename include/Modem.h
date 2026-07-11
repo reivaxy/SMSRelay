@@ -56,6 +56,16 @@ private:
     void initSerial();
 
     /**
+     * Flush all pending data from serial buffers to prevent interference with AT commands.
+     */
+    void flushSerialBuffers();
+
+    /**
+     * Power down the modem by toggling PWRKEY pin.
+     */
+    void powerDownModem();
+
+    /**
      * Wait for and test modem availability.
      */
     bool testModem();
@@ -79,4 +89,6 @@ private:
     bool _initialized = false;
     unsigned long _lastConnectionCheck = 0;
     static const unsigned long CONNECTION_CHECK_INTERVAL = 10000;  // Check every 10 seconds
+    static const unsigned long MODEM_POWERDOWN_TIME_MS = 1500;      // Time to hold PWRKEY for power-down
+    static const unsigned long MODEM_STABILIZATION_DELAY_MS = 4000; // Extra delay after power-on for stability
 };

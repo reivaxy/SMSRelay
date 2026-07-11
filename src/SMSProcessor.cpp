@@ -2,6 +2,7 @@
 #include "TemperatureHumidityProcessor.h"
 #include "ConfigManager.h"
 #include "BatteryProcessor.h"
+#include "MainPowerCheck.h"
 #include "utilities.h"
 
 SMSProcessor::SMSProcessor(SMSSender &sender, const String &targetNumber, SMSReader &reader, 
@@ -153,7 +154,67 @@ void SMSProcessor::handleListCommand(int skipIndex)
 void SMSProcessor::handleLevelCommand()
 {
     log_i("[CMD] Level query received");
-    String levelMsg = _tempHumidityProcessor.getStatus();
+    
+    String levelMsg = "Levels:\n";
+    
+    // Temperature status
+    float temp = _tempHumidityProcessor.getTemperature();
+    float tempHigh = _configManager.getFloat(ConfigManager::Param::TEMP_HIGH);
+    float tempLow = _configManager.getFloat(ConfigManager::Param::TEMP_LOW);
+    
+    levelMsg += "Temp: " + String(temp, 1) + "C";
+    if (temp > tempHigh) {
+        levelMsg += " [HIGH]";
+    } else if (temp < tempLow) {
+        levelMsg += " [LOW]";
+    } else {
+        levelMsg += " [OK]";
+    }
+    levelMsg += "\n";
+    
+    // Humidity status
+    float humidity = _tempHumidityProcessor.getHumidity();
+    float humidityHigh = _configManager.getFloat(ConfigManager::Param::HUMIDITY_HIGH);
+    float humidityLow = _configManager.getFloat(ConfigManager::Param::HUMIDITY_LOW);
+    
+    levelMsg += "Humidity: " + String(humidity, 1) + "%";
+    if (humidity > humidityHigh) {
+        levelMsg += " [HIGH]";
+    } else if (humidity < humidityLow) {
+        levelMsg += " [LOW]";
+    } else {
+        levelMsg += " [OK]";
+    }
+    levelMsg += "\n";
+    
+    // Battery status
+#ifdef BOARD_BAT_ADC_PIN
+    int batAdcValue = BatteryProcessor::readBatADC();
+    int batAdcThreshold = _configManager.getInt(ConfigManager::Param::BAT_ADC_THRESHOLD);
+    int batAdcNearEmpty = _configManager.getInt(ConfigManager::Param::BAT_ADC_NEAR_EMPTY);
+    
+    levelMsg += "Battery: " + String(batAdcValue);
+    if (batAdcValue < batAdcNearEmpty) {
+        levelMsg += " [NEAR EMPTY]";
+    } else if (batAdcValue < batAdcThreshold) {
+        levelMsg += " [USB]";
+    } else {
+        levelMsg += " [OK]";
+    }
+    levelMsg += "\n";
+#endif
+    
+    // Main power status
+    int mainAdcValue = MainPowerCheck::readGPIO00ADC();
+    int powerAdcThreshold = _configManager.getInt(ConfigManager::Param::POWER_ADC_THRESHOLD);
+    
+    levelMsg += "Main Power: " + String(mainAdcValue);
+    if (mainAdcValue < powerAdcThreshold) {
+        levelMsg += " [LOW]";
+    } else {
+        levelMsg += " [OK]";
+    }
+    
     log_i("[CMD] %s", levelMsg.c_str());
     _sender.send(_targetNumber, levelMsg);
 }

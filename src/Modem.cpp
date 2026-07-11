@@ -74,16 +74,6 @@ void Modem::initPins()
     digitalWrite(BOARD_POWERON_PIN, HIGH);
 #endif
 
-    // Set modem reset pin, reset modem
-#ifdef MODEM_RESET_PIN
-    pinMode(MODEM_RESET_PIN, OUTPUT);
-    digitalWrite(MODEM_RESET_PIN, !MODEM_RESET_LEVEL);
-    delay(100);
-    digitalWrite(MODEM_RESET_PIN, MODEM_RESET_LEVEL);
-    delay(1000);
-    digitalWrite(MODEM_RESET_PIN, !MODEM_RESET_LEVEL);
-#endif
-
 #ifdef MODEM_FLIGHT_PIN
     // If there is an airplane mode control, you need to exit airplane mode
     pinMode(MODEM_FLIGHT_PIN, OUTPUT);
@@ -109,6 +99,17 @@ void Modem::initPins()
     // Set ring pin input
     pinMode(MODEM_RING_PIN, INPUT_PULLUP);
 #endif
+
+    // Set modem reset pin, reset modem
+#ifdef MODEM_RESET_PIN
+    pinMode(MODEM_RESET_PIN, OUTPUT);
+    digitalWrite(MODEM_RESET_PIN, !MODEM_RESET_LEVEL);
+    delay(100);
+    digitalWrite(MODEM_RESET_PIN, MODEM_RESET_LEVEL);
+    delay(1000);
+    digitalWrite(MODEM_RESET_PIN, !MODEM_RESET_LEVEL);
+#endif
+
 }
 
 void Modem::initSerial()
@@ -296,6 +297,7 @@ void Modem::checkConnection()
     if (millis() - _lastConnectionCheck < CONNECTION_CHECK_INTERVAL) {
         return;
     }
+    log_i("Modem connection check");
     
     _lastConnectionCheck = millis();
 
@@ -307,6 +309,6 @@ void Modem::checkConnection()
             log_i("Modem successfully reconnected");
         }
     } else {
-        log_d("Modem connection check: OK");
+        log_i("Modem connection check: OK");
     }
 }

@@ -4,12 +4,16 @@
 #include "SMSSender.h"
 #include "MainPowerCheck.h"
 
+// Forward declaration
+class TemperatureHumidityProcessor;
+
 // Handles command SMS received from SMS_TARGET.
 // Supported commands: "FOR:<number> <message>", "STATUS", "LIST", 
-// "READ <index>", "DELETE <index>".
+// "READ <index>", "DELETE <index>", "LEVELS".
 class SMSProcessor {
 public:
-    SMSProcessor(SMSSender &sender, const String &targetNumber, SMSReader &reader, MainPowerCheck &mainPowerCheck);
+    SMSProcessor(SMSSender &sender, const String &targetNumber, SMSReader &reader, 
+                 MainPowerCheck &mainPowerCheck, TemperatureHumidityProcessor &tempHumidityProcessor);
 
     // Processes a command SMS. The original SMS is always considered handled
     // (caller should delete it regardless of individual command success).
@@ -22,9 +26,11 @@ private:
     void handleListCommand(int skipIndex);
     void handleReadCommand(int index);
     void handleDeleteCommand(int index);
+    void handleLevelCommand();
 
-    SMSSender     &_sender;
-    String         _targetNumber;
-    SMSReader      &_reader;
-    MainPowerCheck &_mainPowerCheck;
+    SMSSender                       &_sender;
+    String                           _targetNumber;
+    SMSReader                        &_reader;
+    MainPowerCheck                   &_mainPowerCheck;
+    TemperatureHumidityProcessor     &_tempHumidityProcessor;
 };

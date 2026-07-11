@@ -39,6 +39,8 @@
     // It is only available in V1.4 version. In other versions, IO36 is not connected.
     #define BOARD_SOLAR_ADC_PIN                 (36)
 
+    // DHT22 temperature and humidity sensor
+    #define BOARD_DHT_PIN                       (32)
 
     //! The following pins are for SimShield and need to be used with SimShield
     //! 以下引脚针对SimShield,需要搭配SimShield 

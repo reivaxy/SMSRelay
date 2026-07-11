@@ -1,9 +1,12 @@
 #include "SMSProcessor.h"
+#include "TemperatureHumidityProcessor.h"
 #include "BatteryProcessor.h"
 #include "utilities.h"
 
-SMSProcessor::SMSProcessor(SMSSender &sender, const String &targetNumber, SMSReader &reader, MainPowerCheck &mainPowerCheck)
-    : _sender(sender), _targetNumber(targetNumber), _reader(reader), _mainPowerCheck(mainPowerCheck) {}
+SMSProcessor::SMSProcessor(SMSSender &sender, const String &targetNumber, SMSReader &reader, 
+                           MainPowerCheck &mainPowerCheck, TemperatureHumidityProcessor &tempHumidityProcessor)
+    : _sender(sender), _targetNumber(targetNumber), _reader(reader), _mainPowerCheck(mainPowerCheck),
+      _tempHumidityProcessor(tempHumidityProcessor) {}
 
 void SMSProcessor::process(const ReceivedSMS &sms)
 {
@@ -15,6 +18,8 @@ void SMSProcessor::process(const ReceivedSMS &sms)
         handleForCommand(sms.text.substring(4));
     } else if (textUpper == "STATUS") {
         handleStatusCommand();
+    } else if (textUpper == "LEVELS") {
+        handleLevelCommand();
     } else if (textUpper == "LIST") {
         handleListCommand(sms.index);
     } else if (textUpper.startsWith("READ ")) {
@@ -137,4 +142,11 @@ void SMSProcessor::handleListCommand(int skipIndex)
     _sender.send(_targetNumber, response);
 }
 
+void SMSProcessor::handleLevelCommand()
+{
+    log_i("[CMD] Level query received");
+    String levelMsg = _tempHumidityProcessor.getStatus();
+    log_i("[CMD] %s", levelMsg.c_str());
+    _sender.send(_targetNumber, levelMsg);
+}
 

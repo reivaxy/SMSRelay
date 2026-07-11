@@ -29,15 +29,17 @@
 #include "BatteryProcessor.h"
 #include "MainPowerCheck.h"
 #include "SerialConsole.h"
+#include "TemperatureHumidityProcessor.h"
 
-Modem            modem;
-SMSSender        sender(modem.getModem(), modem.getSerialStream());
-SMSReader        reader(modem.getModem(), modem.getSerialStream());
-SMSForwarder     forwarder(sender, SMS_TARGET);
-BatteryProcessor batteryProcessor(sender, SMS_TARGET);
-MainPowerCheck   mainPowerCheck(sender, SMS_TARGET);
-SMSProcessor     processor(sender, SMS_TARGET, reader, mainPowerCheck);
-SerialConsole    console(reader, forwarder, batteryProcessor, mainPowerCheck);
+Modem                        modem;
+SMSSender                    sender(modem.getModem(), modem.getSerialStream());
+SMSReader                    reader(modem.getModem(), modem.getSerialStream());
+SMSForwarder                 forwarder(sender, SMS_TARGET);
+BatteryProcessor             batteryProcessor(sender, SMS_TARGET);
+MainPowerCheck               mainPowerCheck(sender, SMS_TARGET);
+TemperatureHumidityProcessor tempHumidityProcessor(sender, SMS_TARGET, BOARD_DHT_PIN);
+SMSProcessor                 processor(sender, SMS_TARGET, reader, mainPowerCheck, tempHumidityProcessor);
+SerialConsole                console(reader, forwarder, batteryProcessor, mainPowerCheck);
 
 void setup()
 {
@@ -48,6 +50,9 @@ void setup()
         log_e("Modem initialization failed");
         return;
     }
+
+    // Initialize temperature and humidity sensor
+    tempHumidityProcessor.init();
 
     // Send power-on notification
     log_i("Sending power-on notification...");
@@ -83,6 +88,9 @@ void loop()
 
     // Check main power level
     mainPowerCheck.check();
+
+    // Check temperature and humidity levels
+    tempHumidityProcessor.check();
 
     delay(100);
 }

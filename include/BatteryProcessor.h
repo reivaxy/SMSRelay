@@ -13,7 +13,7 @@ public:
     // Returns the averaged raw ADC value from BOARD_BAT_ADC_PIN (0 if pin not defined).
     static int readBatADC();
 
-    static constexpr int BAT_ADC_THRESHOLD            = 2300; // above: usb power, below: battery power
+    static constexpr int BAT_ADC_THRESHOLD            = 2330; // above: usb power, below: battery power
     static constexpr int BAT_ADC_NEAR_EMPTY_THRESHOLD = 1800;
 
 private:

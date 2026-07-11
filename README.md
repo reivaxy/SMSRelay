@@ -1,5 +1,9 @@
 # SMS relay
 
+This is a preliminary work on an new aquarium monitoring system, and this subsystem is in charge of warning in case of main power failure, in which case the home wifi is no longer available to send alerts.
+
+Years ago I designed an [arduino based device wich was doing that](https://github.com/reivaxy/aquaMonitor) that sent text message for various alerts, including main power outage, and I noticed it would occasionaly receive text messages from the mobile provider that I would never read, so this new device will forward them to your own mobile, and then adds a few features.
+
 Using a LILYGO T-A7670E R2 board with a nano sim with its own phone number, this program will forward to your phone any SMS it receives, preceded by a message saying what number sent it.
 
 <img width="601" height="610" alt="image" src="https://github.com/user-attachments/assets/b6f5bb17-422f-488b-9362-95136565b258" />

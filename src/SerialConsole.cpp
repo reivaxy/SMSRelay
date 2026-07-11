@@ -20,8 +20,10 @@ static String formatSender(const String &number)
     return "\"" + number + "\"";
 }
 
-SerialConsole::SerialConsole(SMSReader &reader, SMSForwarder &forwarder)
-    : _reader(reader), _forwarder(forwarder) {}
+SerialConsole::SerialConsole(SMSReader &reader, SMSForwarder &forwarder,
+                             BatteryProcessor &batteryProcessor, MainPowerCheck &mainPowerCheck)
+    : _reader(reader), _forwarder(forwarder), 
+      _batteryProcessor(batteryProcessor), _mainPowerCheck(mainPowerCheck) {}
 
 void SerialConsole::check()
 {
@@ -68,8 +70,10 @@ void SerialConsole::processLine(const String &line)
         } else {
             Serial.println("[ERROR] forward: invalid index");
         }
+    } else if (upper == "STATUS") {
+        handleStatus();
     } else {
-        Serial.println("[CONSOLE] Unknown command. Use: list | read X | delete X | forward X");
+        Serial.println("[CONSOLE] Unknown command. Use: list | read X | delete X | forward X | status");
     }
 }
 
@@ -140,3 +144,28 @@ void SerialConsole::handleForward(int index)
         Serial.printf("[ERROR] Failed to forward SMS at index %d\n", index);
     }
 }
+
+void SerialConsole::handleStatus()
+{
+    Serial.println("[CONSOLE] System Status:");
+    
+    int batteryADC = BatteryProcessor::readBatADC();
+    int mainPowerADC = MainPowerCheck::readGPIO00ADC();
+    
+    Serial.printf("  Battery Level (ADC)     : %d", batteryADC);
+    if (batteryADC > BatteryProcessor::BAT_ADC_THRESHOLD) {
+        Serial.println(" [USB Power]");
+    } else if (batteryADC < BatteryProcessor::BAT_ADC_NEAR_EMPTY_THRESHOLD) {
+        Serial.println(" [Battery Near Empty]");
+    } else {
+        Serial.println(" [Battery Power]");
+    }
+    
+    Serial.printf("  Main Power Level (ADC)  : %d", mainPowerADC);
+    if (mainPowerADC >= MainPowerCheck::POWER_ADC_THRESHOLD) {
+        Serial.println(" [OK]");
+    } else {
+        Serial.println(" [LOW]");
+    }
+}
+

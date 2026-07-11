@@ -2,8 +2,8 @@
 #include "BatteryProcessor.h"
 #include "utilities.h"
 
-SMSProcessor::SMSProcessor(SMSSender &sender, const String &targetNumber, SMSReader &reader)
-    : _sender(sender), _targetNumber(targetNumber), _reader(reader) {}
+SMSProcessor::SMSProcessor(SMSSender &sender, const String &targetNumber, SMSReader &reader, MainPowerCheck &mainPowerCheck)
+    : _sender(sender), _targetNumber(targetNumber), _reader(reader), _mainPowerCheck(mainPowerCheck) {}
 
 void SMSProcessor::process(const ReceivedSMS &sms)
 {
@@ -94,16 +94,17 @@ void SMSProcessor::handleStatusCommand()
     log_i("[CMD] Status query received");
 
 #ifdef BOARD_BAT_ADC_PIN
-    int adcValue = BatteryProcessor::readBatADC();
-    bool isBattery = (adcValue > 0 && adcValue < BatteryProcessor::BAT_ADC_THRESHOLD);
+    int batAdcValue = BatteryProcessor::readBatADC();
+    bool isBattery = (batAdcValue > 0 && batAdcValue < BatteryProcessor::BAT_ADC_THRESHOLD);
     String powerSource = isBattery ? "Battery" : "USB";
-
-    String statusMsg = "Status: ADC=" + String(adcValue) +
-                       " Threshold=" + String(BatteryProcessor::BAT_ADC_THRESHOLD) +
-                       " Power=" + powerSource;
+    String statusMsg = "Status:\nBattery: " + String(batAdcValue) + " (" + powerSource + ")\n";
 #else
-    String statusMsg = "Status: No battery ADC";
+    String statusMsg = "Status:\nBattery: No ADC\n";
 #endif
+
+    int mainAdcValue = MainPowerCheck::readGPIO00ADC();
+    String mainStatus = (mainAdcValue >= MainPowerCheck::POWER_ADC_THRESHOLD) ? "OK" : "LOW";
+    statusMsg += "Main Power: " + String(mainAdcValue) + " (" + mainStatus + ")";
 
     log_i("[CMD] %s", statusMsg.c_str());
     _sender.send(_targetNumber, statusMsg);

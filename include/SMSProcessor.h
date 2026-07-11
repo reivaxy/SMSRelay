@@ -2,13 +2,14 @@
 #include <Arduino.h>
 #include "SMSReader.h"
 #include "SMSSender.h"
+#include "MainPowerCheck.h"
 
 // Handles command SMS received from SMS_TARGET.
 // Supported commands: "FOR:<number> <message>", "STATUS", "LIST", 
 // "READ <index>", "DELETE <index>".
 class SMSProcessor {
 public:
-    SMSProcessor(SMSSender &sender, const String &targetNumber, SMSReader &reader);
+    SMSProcessor(SMSSender &sender, const String &targetNumber, SMSReader &reader, MainPowerCheck &mainPowerCheck);
 
     // Processes a command SMS. The original SMS is always considered handled
     // (caller should delete it regardless of individual command success).
@@ -22,7 +23,8 @@ private:
     void handleReadCommand(int index);
     void handleDeleteCommand(int index);
 
-    SMSSender &_sender;
-    String     _targetNumber;
-    SMSReader &_reader;
+    SMSSender     &_sender;
+    String         _targetNumber;
+    SMSReader      &_reader;
+    MainPowerCheck &_mainPowerCheck;
 };

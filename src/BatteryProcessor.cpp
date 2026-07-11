@@ -5,14 +5,14 @@ BatteryProcessor::BatteryProcessor(SMSSender &sender, const String &targetNumber
 
 void BatteryProcessor::check()
 {
-    if (millis() - _lastCheck < 60000) return;
+    if (millis() - _lastCheck < 10000) return;
     _lastCheck = millis();
 
     int adcValue = readBatADC();
     if (adcValue > 0 && adcValue < BAT_ADC_THRESHOLD) {
         if (adcValue < BAT_ADC_NEAR_EMPTY_THRESHOLD && !_nearEmptyAlertSent) {
-            log_i("Battery near empty (ADC=%d), sending SMS...", adcValue);
-            if (_sender.send(_targetNumber, "Battery near empty (ADC=" + String(adcValue) + ")")) {
+            log_i("Battery near empty (BatteryAdcPin=%d), sending SMS...", adcValue);
+            if (_sender.send(_targetNumber, "Battery near empty (BatteryAdcPin=" + String(adcValue) + ")")) {
                 log_i("[OK] Battery near empty SMS sent successfully");
                 _nearEmptyAlertSent = true;
                 _lastAlertADC = adcValue;
@@ -20,8 +20,8 @@ void BatteryProcessor::check()
                 log_i("[ERROR] Failed to send battery near empty SMS");
             }
         } else if (!_batteryAlertSent) {
-            log_i("Battery power detected (ADC=%d), sending SMS...", adcValue);
-            if (_sender.send(_targetNumber, "Device is now on battery power (ADC=" + String(adcValue) + ")")) {
+            log_i("Battery power detected (BatteryAdcPin=%d), sending SMS...", adcValue);
+            if (_sender.send(_targetNumber, "Device is now on battery power (BatteryAdcPin=" + String(adcValue) + ")")) {
                 log_i("[OK] Battery alert SMS sent successfully");
                 _batteryAlertSent = true;
                 _usbAlertSent = false;

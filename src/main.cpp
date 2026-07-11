@@ -30,29 +30,34 @@
 #include "MainPowerCheck.h"
 #include "SerialConsole.h"
 #include "TemperatureHumidityProcessor.h"
+#include "ConfigManager.h"
 
 Modem                        modem;
 SMSSender                    sender(modem.getModem(), modem.getSerialStream());
 SMSReader                    reader(modem.getModem(), modem.getSerialStream());
 SMSForwarder                 forwarder(sender, SMS_TARGET);
-BatteryProcessor             batteryProcessor(sender, SMS_TARGET);
-MainPowerCheck               mainPowerCheck(sender, SMS_TARGET);
-TemperatureHumidityProcessor tempHumidityProcessor(sender, SMS_TARGET, BOARD_DHT_PIN);
-SMSProcessor                 processor(sender, SMS_TARGET, reader, mainPowerCheck, tempHumidityProcessor);
-SerialConsole                console(reader, forwarder, batteryProcessor, mainPowerCheck);
+ConfigManager                configManager;
+BatteryProcessor             batteryProcessor(sender, SMS_TARGET, configManager);
+MainPowerCheck               mainPowerCheck(sender, SMS_TARGET, configManager);
+TemperatureHumidityProcessor tempHumidityProcessor(sender, SMS_TARGET, BOARD_DHT_PIN, configManager);
+SMSProcessor                 processor(sender, SMS_TARGET, reader, mainPowerCheck, tempHumidityProcessor, configManager);
+SerialConsole                console(reader, forwarder, batteryProcessor, mainPowerCheck, configManager);
 
 void setup()
 {
     Serial.begin(115200);
+
+    // Initialize configuration manager for persistent storage
+    configManager.init();
+    
+        // Initialize temperature and humidity sensor
+        tempHumidityProcessor.init();
 
     // Initialize modem hardware, serial communication, network, and SMS configuration
     if (!modem.init()) {
         log_e("Modem initialization failed");
         return;
     }
-
-    // Initialize temperature and humidity sensor
-    tempHumidityProcessor.init();
 
     // Send power-on notification
     log_i("Sending power-on notification...");

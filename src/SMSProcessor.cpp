@@ -1,12 +1,14 @@
 #include "SMSProcessor.h"
 #include "TemperatureHumidityProcessor.h"
+#include "ConfigManager.h"
 #include "BatteryProcessor.h"
 #include "utilities.h"
 
 SMSProcessor::SMSProcessor(SMSSender &sender, const String &targetNumber, SMSReader &reader, 
-                           MainPowerCheck &mainPowerCheck, TemperatureHumidityProcessor &tempHumidityProcessor)
+                           MainPowerCheck &mainPowerCheck, TemperatureHumidityProcessor &tempHumidityProcessor,
+                           ConfigManager &configManager)
     : _sender(sender), _targetNumber(targetNumber), _reader(reader), _mainPowerCheck(mainPowerCheck),
-      _tempHumidityProcessor(tempHumidityProcessor) {}
+      _tempHumidityProcessor(tempHumidityProcessor), _configManager(configManager) {}
 
 void SMSProcessor::process(const ReceivedSMS &sms)
 {
@@ -22,6 +24,10 @@ void SMSProcessor::process(const ReceivedSMS &sms)
         handleLevelCommand();
     } else if (textUpper == "LIST") {
         handleListCommand(sms.index);
+    } else if (textUpper == "CONFIG") {
+        handleReadConfigCommand();
+    } else if (textUpper.startsWith("CONFIG ")) {
+        handleWriteConfigCommand(sms.text.substring(7));
     } else if (textUpper.startsWith("READ ")) {
         int index = sms.text.substring(5).toInt();
         if (index > 0) {
@@ -100,7 +106,8 @@ void SMSProcessor::handleStatusCommand()
 
 #ifdef BOARD_BAT_ADC_PIN
     int batAdcValue = BatteryProcessor::readBatADC();
-    bool isBattery = (batAdcValue > 0 && batAdcValue < BatteryProcessor::BAT_ADC_THRESHOLD);
+    int batAdcThreshold = _configManager.getInt(ConfigManager::Param::BAT_ADC_THRESHOLD);
+    bool isBattery = (batAdcValue > 0 && batAdcValue < batAdcThreshold);
     String powerSource = isBattery ? "Battery" : "USB";
     String statusMsg = "Status:\nBattery: " + String(batAdcValue) + " (" + powerSource + ")\n";
 #else
@@ -108,7 +115,8 @@ void SMSProcessor::handleStatusCommand()
 #endif
 
     int mainAdcValue = MainPowerCheck::readGPIO00ADC();
-    String mainStatus = (mainAdcValue >= MainPowerCheck::POWER_ADC_THRESHOLD) ? "OK" : "LOW";
+    int powerAdcThreshold = _configManager.getInt(ConfigManager::Param::POWER_ADC_THRESHOLD);
+    String mainStatus = (mainAdcValue >= powerAdcThreshold) ? "OK" : "LOW";
     statusMsg += "Main Power: " + String(mainAdcValue) + " (" + mainStatus + ")";
 
     log_i("[CMD] %s", statusMsg.c_str());
@@ -148,5 +156,97 @@ void SMSProcessor::handleLevelCommand()
     String levelMsg = _tempHumidityProcessor.getStatus();
     log_i("[CMD] %s", levelMsg.c_str());
     _sender.send(_targetNumber, levelMsg);
+}
+
+void SMSProcessor::handleReadConfigCommand()
+{
+    log_i("[CMD] Config query received");
+    String configMsg = _configManager.getAllParams();
+    log_i("[CMD] %s", configMsg.c_str());
+    _sender.send(_targetNumber, configMsg);
+}
+
+void SMSProcessor::handleWriteConfigCommand(const String &rest)
+{
+    String trimmed = rest;
+    trimmed.trim();
+    
+    // Parse: "CONFIG <param> <value>"
+    // Format: parameter name (case insensitive) followed by value
+    
+    int spaceIdx = trimmed.indexOf(' ');
+    if (spaceIdx <= 0) {
+        _sender.send(_targetNumber, "ERROR: CONFIG syntax: CONFIG <param> <value>");
+        return;
+    }
+    
+    String paramName = trimmed.substring(0, spaceIdx);
+    paramName.toUpperCase();
+    String valueStr = trimmed.substring(spaceIdx + 1);
+    valueStr.trim();
+    
+    if (valueStr.length() == 0) {
+        _sender.send(_targetNumber, "ERROR: CONFIG: missing value");
+        return;
+    }
+    
+    bool success = false;
+    String confirmMsg;
+    
+    // Temperature thresholds
+    if (paramName == "TEMP_HIGH") {
+        float val = valueStr.toFloat();
+        _configManager.setFloat(ConfigManager::Param::TEMP_HIGH, val);
+        confirmMsg = "OK: Temp High set to " + String(val, 1) + "°C";
+        success = true;
+    } 
+    else if (paramName == "TEMP_LOW") {
+        float val = valueStr.toFloat();
+        _configManager.setFloat(ConfigManager::Param::TEMP_LOW, val);
+        confirmMsg = "OK: Temp Low set to " + String(val, 1) + "°C";
+        success = true;
+    } 
+    // Humidity thresholds
+    else if (paramName == "HUMIDITY_HIGH") {
+        float val = valueStr.toFloat();
+        _configManager.setFloat(ConfigManager::Param::HUMIDITY_HIGH, val);
+        confirmMsg = "OK: Humidity High set to " + String(val, 1) + "%";
+        success = true;
+    } 
+    else if (paramName == "HUMIDITY_LOW") {
+        float val = valueStr.toFloat();
+        _configManager.setFloat(ConfigManager::Param::HUMIDITY_LOW, val);
+        confirmMsg = "OK: Humidity Low set to " + String(val, 1) + "%";
+        success = true;
+    } 
+    // Battery thresholds
+    else if (paramName == "BAT_ADC_THRESHOLD") {
+        int val = valueStr.toInt();
+        _configManager.setInt(ConfigManager::Param::BAT_ADC_THRESHOLD, val);
+        confirmMsg = "OK: Battery Threshold set to " + String(val);
+        success = true;
+    } 
+    else if (paramName == "BAT_ADC_NEAR_EMPTY") {
+        int val = valueStr.toInt();
+        _configManager.setInt(ConfigManager::Param::BAT_ADC_NEAR_EMPTY, val);
+        confirmMsg = "OK: Battery Near Empty set to " + String(val);
+        success = true;
+    } 
+    // Power thresholds
+    else if (paramName == "POWER_ADC_THRESHOLD") {
+        int val = valueStr.toInt();
+        _configManager.setInt(ConfigManager::Param::POWER_ADC_THRESHOLD, val);
+        confirmMsg = "OK: Power Threshold set to " + String(val);
+        success = true;
+    }
+    
+    if (success) {
+        log_i("[CMD] %s", confirmMsg.c_str());
+        _sender.send(_targetNumber, confirmMsg);
+    } else {
+        String errorMsg = "ERROR: Unknown parameter: " + paramName + "\nValid: TEMP_HIGH, TEMP_LOW, HUMIDITY_HIGH, HUMIDITY_LOW, BAT_ADC_THRESHOLD, BAT_ADC_NEAR_EMPTY, POWER_ADC_THRESHOLD";
+        log_e("[CMD] %s", errorMsg.c_str());
+        _sender.send(_targetNumber, errorMsg);
+    }
 }
 

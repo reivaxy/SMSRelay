@@ -1,10 +1,11 @@
 #include "MainPowerCheck.h"
+#include "ConfigManager.h"
 
 // GPIO36 maps to ADC1_CHANNEL_0 on ESP32
 #define MAIN_POWER_ADC_PIN 36  
 
-MainPowerCheck::MainPowerCheck(SMSSender &sender, const String &targetNumber)
-    : _sender(sender), _targetNumber(targetNumber) 
+MainPowerCheck::MainPowerCheck(SMSSender &sender, const String &targetNumber, ConfigManager &configManager)
+    : _sender(sender), _targetNumber(targetNumber), _configManager(configManager)
 {
     // Configure the ADC pin
 #ifdef MAIN_POWER_ADC_PIN
@@ -14,6 +15,9 @@ MainPowerCheck::MainPowerCheck(SMSSender &sender, const String &targetNumber)
 
 void MainPowerCheck::check()
 {
+    // Get current threshold from manager
+    int powerAdcThreshold = _configManager.getInt(ConfigManager::Param::POWER_ADC_THRESHOLD);
+    
     int adcValue = readGPIO00ADC();
     
     // Log to Serial every 500ms
@@ -24,7 +28,7 @@ void MainPowerCheck::check()
     
 
     // Check if level has crossed below threshold
-    if (adcValue < POWER_ADC_THRESHOLD && !_lowPowerAlertSent) {
+    if (adcValue < powerAdcThreshold && !_lowPowerAlertSent) {
         log_i("Main power low (MainAdcPin=%d), sending SMS alert...", adcValue);
         String alertMsg = "ALERT: Main power level is low (MainAdcPin=" + String(adcValue) + ")";
         if (_sender.send(_targetNumber, alertMsg)) {
@@ -37,7 +41,7 @@ void MainPowerCheck::check()
         }
     }
     // Check if level has crossed back above threshold
-    else if (adcValue >= POWER_ADC_THRESHOLD && _lowPowerAlertSent && !_normalPowerAlertSent) {
+    else if (adcValue >= powerAdcThreshold && _lowPowerAlertSent && !_normalPowerAlertSent) {
         log_i("Main power restored (MainAdcPin=%d), sending SMS notification...", adcValue);
         String restoreMsg = "NOTIFICATION: Main power level restored (MainAdcPin=" + String(adcValue) + ")";
         if (_sender.send(_targetNumber, restoreMsg)) {

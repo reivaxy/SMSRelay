@@ -2,10 +2,14 @@
 #include <Arduino.h>
 #include "SMSSender.h"
 
+// Forward declaration
+class ConfigManager;
+
 // Monitors GPIO00 ADC level and sends alert SMS messages when threshold is crossed.
+// Uses ConfigManager for dynamic, editable thresholds.
 class MainPowerCheck {
 public:
-    MainPowerCheck(SMSSender &sender, const String &targetNumber);
+    MainPowerCheck(SMSSender &sender, const String &targetNumber, ConfigManager &configManager);
 
     // Call from loop() — checks GPIO00 ADC level continuously.
     // Sends SMS alerts when level crosses threshold and logs to Serial every 500ms.
@@ -14,12 +18,10 @@ public:
     // Returns the averaged raw ADC value from GPIO00 (pin 36 on ESP32)
     static int readGPIO00ADC();
 
-    // Threshold: below this level = low power alert, above = normal operation
-    static constexpr int POWER_ADC_THRESHOLD = 2000;
-
 private:
     SMSSender    &_sender;
     String        _targetNumber;
+    ConfigManager &_configManager;
     unsigned long _lastSerialLog     = 0;  // Track serial output timing (every 500ms)
     bool          _lowPowerAlertSent = false;
     bool          _normalPowerAlertSent = false;

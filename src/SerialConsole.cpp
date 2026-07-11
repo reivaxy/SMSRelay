@@ -1,4 +1,5 @@
 #include "SerialConsole.h"
+#include "ConfigManager.h"
 
 // Returns true if the address looks like a dialable phone number
 // (digits, +, *, # only). Returns false for alphanumeric sender IDs.
@@ -21,9 +22,10 @@ static String formatSender(const String &number)
 }
 
 SerialConsole::SerialConsole(SMSReader &reader, SMSForwarder &forwarder,
-                             BatteryProcessor &batteryProcessor, MainPowerCheck &mainPowerCheck)
+                             BatteryProcessor &batteryProcessor, MainPowerCheck &mainPowerCheck,
+                             ConfigManager &configManager)
     : _reader(reader), _forwarder(forwarder), 
-      _batteryProcessor(batteryProcessor), _mainPowerCheck(mainPowerCheck) {}
+      _batteryProcessor(batteryProcessor), _mainPowerCheck(mainPowerCheck), _configManager(configManager) {}
 
 void SerialConsole::check()
 {
@@ -152,17 +154,21 @@ void SerialConsole::handleStatus()
     int batteryADC = BatteryProcessor::readBatADC();
     int mainPowerADC = MainPowerCheck::readGPIO00ADC();
     
+    int batAdcThreshold = _configManager.getInt(ConfigManager::Param::BAT_ADC_THRESHOLD);
+    int batAdcNearEmpty = _configManager.getInt(ConfigManager::Param::BAT_ADC_NEAR_EMPTY);
+    int powerAdcThreshold = _configManager.getInt(ConfigManager::Param::POWER_ADC_THRESHOLD);
+    
     Serial.printf("  Battery Level (ADC)     : %d", batteryADC);
-    if (batteryADC > BatteryProcessor::BAT_ADC_THRESHOLD) {
+    if (batteryADC > batAdcThreshold) {
         Serial.println(" [USB Power]");
-    } else if (batteryADC < BatteryProcessor::BAT_ADC_NEAR_EMPTY_THRESHOLD) {
+    } else if (batteryADC < batAdcNearEmpty) {
         Serial.println(" [Battery Near Empty]");
     } else {
         Serial.println(" [Battery Power]");
     }
     
     Serial.printf("  Main Power Level (ADC)  : %d", mainPowerADC);
-    if (mainPowerADC >= MainPowerCheck::POWER_ADC_THRESHOLD) {
+    if (mainPowerADC >= powerAdcThreshold) {
         Serial.println(" [OK]");
     } else {
         Serial.println(" [LOW]");

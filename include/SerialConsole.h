@@ -5,6 +5,9 @@
 #include "BatteryProcessor.h"
 #include "MainPowerCheck.h"
 
+// Forward declaration
+class ConfigManager;
+
 // Processes interactive commands typed into the Serial monitor.
 // Call check() from loop(). Commands are line-buffered and case-insensitive.
 //
@@ -17,7 +20,8 @@
 class SerialConsole {
 public:
     SerialConsole(SMSReader &reader, SMSForwarder &forwarder, 
-                  BatteryProcessor &batteryProcessor, MainPowerCheck &mainPowerCheck);
+                  BatteryProcessor &batteryProcessor, MainPowerCheck &mainPowerCheck,
+                  ConfigManager &configManager);
 
     // Call from loop(). Reads available Serial bytes, processes complete lines.
     void check();
@@ -34,5 +38,6 @@ private:
     SMSForwarder      &_forwarder;
     BatteryProcessor  &_batteryProcessor;
     MainPowerCheck    &_mainPowerCheck;
+    ConfigManager     &_configManager;
     String             _inputBuffer;
 };

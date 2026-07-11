@@ -1,16 +1,21 @@
 #include "BatteryProcessor.h"
+#include "ConfigManager.h"
 
-BatteryProcessor::BatteryProcessor(SMSSender &sender, const String &targetNumber)
-    : _sender(sender), _targetNumber(targetNumber) {}
+BatteryProcessor::BatteryProcessor(SMSSender &sender, const String &targetNumber, ConfigManager &configManager)
+    : _sender(sender), _targetNumber(targetNumber), _configManager(configManager) {}
 
 void BatteryProcessor::check()
 {
     if (millis() - _lastCheck < 10000) return;
     _lastCheck = millis();
 
+    // Get current thresholds from manager
+    int batAdcThreshold = _configManager.getInt(ConfigManager::Param::BAT_ADC_THRESHOLD);
+    int batAdcNearEmpty = _configManager.getInt(ConfigManager::Param::BAT_ADC_NEAR_EMPTY);
+
     int adcValue = readBatADC();
-    if (adcValue > 0 && adcValue < BAT_ADC_THRESHOLD) {
-        if (adcValue < BAT_ADC_NEAR_EMPTY_THRESHOLD && !_nearEmptyAlertSent) {
+    if (adcValue > 0 && adcValue < batAdcThreshold) {
+        if (adcValue < batAdcNearEmpty && !_nearEmptyAlertSent) {
             log_i("Battery near empty (BatteryAdcPin=%d), sending SMS...", adcValue);
             if (_sender.send(_targetNumber, "Battery near empty (BatteryAdcPin=" + String(adcValue) + ")")) {
                 log_i("[OK] Battery near empty SMS sent successfully");

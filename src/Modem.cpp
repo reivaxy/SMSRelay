@@ -143,7 +143,7 @@ bool Modem::testModem()
 bool Modem::waitSMSReady()
 {
     // Wait PB DONE
-    log_i("Wait SMS Done.");
+    log_i("Wait 'SMS Done'.");
     if (!_modem.waitResponse(100000UL, "SMS DONE")) {
         log_i("Can't wait from sms register ....");
         return false;

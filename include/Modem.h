@@ -3,6 +3,7 @@
 #include "utilities.h"
 #include <TinyGsmClient.h>
 
+#define TEST_AT_TIMEOUT 200  // Timeout for AT command testing in milliseconds
 class Modem {
 public:
     Modem();
@@ -24,6 +25,24 @@ public:
      * Get reference to the modem serial stream.
      */
     Stream &getSerialStream();
+
+    /**
+     * Check if modem is still connected and responsive.
+     * Returns true if modem is connected, false otherwise.
+     */
+    bool isConnected();
+
+    /**
+     * Attempt to reconnect the modem.
+     * Returns true if reconnection successful, false otherwise.
+     */
+    bool reconnect();
+
+    /**
+     * Perform periodic connection check with automatic reconnection.
+     * Call this regularly from the main loop to ensure modem stays connected.
+     */
+    void checkConnection();
 
 private:
     /**
@@ -58,4 +77,6 @@ private:
 
     TinyGsm _modem;
     bool _initialized = false;
+    unsigned long _lastConnectionCheck = 0;
+    static const unsigned long CONNECTION_CHECK_INTERVAL = 10000;  // Check every 10 seconds
 };

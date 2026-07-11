@@ -68,6 +68,9 @@ void loop()
     // Check for Serial console commands
     console.check();
 
+    // Check modem connection periodically and reconnect if needed
+    modem.checkConnection();
+
     // Check for incoming SMS periodically
     static unsigned long lastCheck = 0;
     if (millis() - lastCheck > 2000) {

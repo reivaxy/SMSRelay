@@ -80,7 +80,7 @@ void Modem::initPins()
     digitalWrite(MODEM_RESET_PIN, !MODEM_RESET_LEVEL);
     delay(100);
     digitalWrite(MODEM_RESET_PIN, MODEM_RESET_LEVEL);
-    delay(2600);
+    delay(1000);
     digitalWrite(MODEM_RESET_PIN, !MODEM_RESET_LEVEL);
 #endif
 
@@ -121,9 +121,22 @@ void Modem::initSerial()
 
 bool Modem::testModem()
 {
-    while (!_modem.testAT()) {
-        delay(10);
+    log_i("Testing modem connectivity...");
+    
+    const int MAX_ATTEMPTS = 10;
+    int attempts = 0;
+    
+    while (!_modem.testAT(TEST_AT_TIMEOUT) && attempts < MAX_ATTEMPTS) {
+        delay(200);
+        attempts++;
     }
+    
+    if (attempts >= MAX_ATTEMPTS) {
+        log_e("Modem test failed after %d attempts", MAX_ATTEMPTS);
+        return false;
+    }
+    
+    log_i("Modem test successful after %d attempts", attempts);
     return true;
 }
 
@@ -194,4 +207,58 @@ void Modem::configureSMS()
     // Default charset: IRA (ASCII). handleSMS switches to UCS2 for reading.
     _modem.sendAT("+CSCS=\"IRA\"");
     _modem.waitResponse();
+}
+
+bool Modem::isConnected()
+{
+    // Test if modem responds to AT commands
+    if (!_modem.testAT(TEST_AT_TIMEOUT)) {
+        log_w("Modem not responding to AT commands");
+        return false;
+    }
+
+    // Check if registered with network
+    RegStatus status = _modem.getRegistrationStatus();
+    bool registered = (status == REG_OK_HOME || status == REG_OK_ROAMING);
+    
+    if (!registered) {
+        log_w("Modem not registered with network. Status: %d", status);
+        return false;
+    }
+
+    return true;
+}
+
+bool Modem::reconnect()
+{
+    log_i("Attempting to reconnect modem...");
+    _initialized = false;   
+   
+    if (init()) {
+        log_i("Modem re-initialized successfully");
+        return true;
+    }
+
+    log_e("Modem reconnection failed");
+    return false;
+}
+
+void Modem::checkConnection()
+{
+    // Check connection periodically to avoid excessive checks
+    if (millis() - _lastConnectionCheck < CONNECTION_CHECK_INTERVAL) {
+        return;
+    }
+    log_i("Checking modem connection...");
+    
+    _lastConnectionCheck = millis();
+
+    if (!isConnected()) {
+        log_w("Modem connection lost, attempting reconnection...");
+        if (!reconnect()) {
+            log_e("Failed to reconnect modem");
+        }
+    } else {
+        log_i("Modem connection check: OK");
+    }
 }

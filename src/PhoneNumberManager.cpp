@@ -67,24 +67,30 @@ bool PhoneNumberManager::addPhoneNumber(const String &number, Permission permiss
 }
 
 bool PhoneNumberManager::removePhoneNumber(const String &numberOrIndex) {
-    String normalized = normalizeNumber(numberOrIndex);
+    String resolved = resolvePhoneByIndexOrNumber(numberOrIndex);
+    
+    if (resolved.length() == 0) {
+        log_w("[PhoneNumberManager] Number not found to remove: %s", numberOrIndex.c_str());
+        return false;
+    }
 
     // Cannot remove root number
-    if (normalized == _rootNumber) {
+    if (resolved == _rootNumber) {
         log_w("[PhoneNumberManager] Cannot remove root number");
         return false;
     }
 
-    int slot = findPhoneSlot(normalized);
+    int slot = findPhoneSlot(resolved);
     if (slot >= 0) {
         _prefs.remove(getPhoneKey(slot).c_str());
         _prefs.remove(getPermissionKey(slot).c_str());
         _prefs.remove(getMuteKey(slot).c_str());
-        log_i("[PhoneNumberManager] Removed %s", normalized.c_str());
+        _prefs.remove(getAliasKey(slot).c_str());
+        log_i("[PhoneNumberManager] Removed %s", resolved.c_str());
         return true;
     }
 
-    log_w("[PhoneNumberManager] Number not found: %s", normalized.c_str());
+    log_w("[PhoneNumberManager] Number not found: %s", resolved.c_str());
     return false;
 }
 

@@ -27,6 +27,9 @@ public:
     // Get formatted status string
     String getStatus() const;
 
+    // Reset alert sent flags
+    void resetAlertFlags();
+
 private:
     void readSensor();
     void checkThresholds();

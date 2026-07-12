@@ -40,7 +40,7 @@ ConfigManager                configManager;
 BatteryProcessor             batteryProcessor(sender, SMS_TARGET, configManager);
 MainPowerCheck               mainPowerCheck(sender, SMS_TARGET, configManager);
 TemperatureHumidityProcessor tempHumidityProcessor(sender, SMS_TARGET, BOARD_DHT_PIN, configManager);
-SMSProcessor                 processor(sender, SMS_TARGET, reader, mainPowerCheck, tempHumidityProcessor, configManager);
+SMSProcessor                 processor(sender, SMS_TARGET, reader, mainPowerCheck, batteryProcessor, tempHumidityProcessor, configManager);
 SerialConsole                console(reader, forwarder, batteryProcessor, mainPowerCheck, configManager);
 
 void setup()

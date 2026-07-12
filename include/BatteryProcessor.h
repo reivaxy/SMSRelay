@@ -17,6 +17,9 @@ public:
     // Returns the averaged raw ADC value from BOARD_BAT_ADC_PIN (0 if pin not defined).
     static int readBatADC();
 
+    // Reset alert sent flags
+    void resetAlertFlags();
+
 private:
     SMSSender    &_sender;
     String        _targetNumber;

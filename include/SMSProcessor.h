@@ -6,6 +6,7 @@
 
 // Forward declarations
 class TemperatureHumidityProcessor;
+class BatteryProcessor;
 class ConfigManager;
 
 // Handles command SMS received from SMS_TARGET.
@@ -16,12 +17,13 @@ class ConfigManager;
 //   "READ <index>" - read message at index
 //   "DELETE <index>" - delete message at index
 //   "LEVELS" - get sensor levels
-//   "THRESHOLDS" or "THRESHOLD?" - get all thresholds
+//   "CONFIG" - get all parameters and their current values
 //   "CONFIG <param> <value>" - set a threshold parameter
+//   "CLEAR" - reset all alert SMS sent flags
 class SMSProcessor {
 public:
     SMSProcessor(SMSSender &sender, const String &targetNumber, SMSReader &reader, 
-                 MainPowerCheck &mainPowerCheck, TemperatureHumidityProcessor &tempHumidityProcessor,
+                 MainPowerCheck &mainPowerCheck, BatteryProcessor &batteryProcessor, TemperatureHumidityProcessor &tempHumidityProcessor,
                  ConfigManager &configManager);
 
     // Processes a command SMS. The original SMS is always considered handled
@@ -38,11 +40,13 @@ private:
     void handleLevelCommand();
     void handleReadConfigCommand();
     void handleWriteConfigCommand(const String &rest);
+    void handleClearCommand();
 
     SMSSender                       &_sender;
     String                           _targetNumber;
     SMSReader                        &_reader;
     MainPowerCheck                   &_mainPowerCheck;
+    BatteryProcessor                 &_batteryProcessor;
     TemperatureHumidityProcessor     &_tempHumidityProcessor;
     ConfigManager                    &_configManager;
 };

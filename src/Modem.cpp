@@ -233,8 +233,8 @@ void Modem::configureSMS()
     _modem.sendAT("+CNMI=2,1,0,1");
     _modem.waitResponse();
 
-    // Default charset: IRA (ASCII). handleSMS switches to UCS2 for reading.
-    _modem.sendAT("+CSCS=\"IRA\"");
+    // Default charset: IRA (ASCII). handleSMS switches to   for reading.
+    _modem.sendAT("+CSCS=\"GSM\"");
     _modem.waitResponse();
 }
 

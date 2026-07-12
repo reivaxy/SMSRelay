@@ -6,10 +6,10 @@
 #include "utilities.h"
 
 SMSProcessor::SMSProcessor(SMSSender &sender, const String &targetNumber, SMSReader &reader, 
-                           MainPowerCheck &mainPowerCheck, TemperatureHumidityProcessor &tempHumidityProcessor,
+                           MainPowerCheck &mainPowerCheck, BatteryProcessor &batteryProcessor, TemperatureHumidityProcessor &tempHumidityProcessor,
                            ConfigManager &configManager)
     : _sender(sender), _targetNumber(targetNumber), _reader(reader), _mainPowerCheck(mainPowerCheck),
-      _tempHumidityProcessor(tempHumidityProcessor), _configManager(configManager) {}
+      _batteryProcessor(batteryProcessor), _tempHumidityProcessor(tempHumidityProcessor), _configManager(configManager) {}
 
 void SMSProcessor::process(const ReceivedSMS &sms)
 {
@@ -43,6 +43,8 @@ void SMSProcessor::process(const ReceivedSMS &sms)
         } else {
             _sender.send(_targetNumber, "ERROR: delete: invalid index");
         }
+    } else if (textUpper == "CLEAR") {
+        handleClearCommand();
     }
 }
 
@@ -245,7 +247,7 @@ void SMSProcessor::handleWriteConfigCommand(const String &rest)
     paramName.toUpperCase();
     String valueStr = trimmed.substring(spaceIdx + 1);
     valueStr.trim();
-    
+
     if (valueStr.length() == 0) {
         _sender.send(_targetNumber, "ERROR: CONFIG: missing value");
         return;
@@ -309,5 +311,18 @@ void SMSProcessor::handleWriteConfigCommand(const String &rest)
         log_e("[CMD] %s", errorMsg.c_str());
         _sender.send(_targetNumber, errorMsg);
     }
+}
+
+void SMSProcessor::handleClearCommand()
+{
+    log_i("[CMD] Clear alert flags received");
+    
+    // Reset alert flags in all processors
+    _tempHumidityProcessor.resetAlertFlags();
+    _batteryProcessor.resetAlertFlags();
+    _mainPowerCheck.resetAlertFlags();
+    
+    log_i("[OK] All alert SMS sent flags cleared");
+    _sender.send(_targetNumber, "OK: All alert SMS flags cleared");
 }
 

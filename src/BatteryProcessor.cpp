@@ -73,3 +73,12 @@ int BatteryProcessor::readBatADC()
     return 0;
 #endif
 }
+
+void BatteryProcessor::resetAlertFlags()
+{
+    log_i("Resetting battery alert flags");
+    _batteryAlertSent = false;
+    _usbAlertSent = false;
+    _nearEmptyAlertSent = false;
+    _lastAlertADC = 0;
+}

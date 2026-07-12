@@ -71,3 +71,10 @@ int MainPowerCheck::readGPIO00ADC()
     return 0;  // Return 0 if pin not defined
 #endif
 }
+
+void MainPowerCheck::resetAlertFlags()
+{
+    log_i("Resetting main power alert flags");
+    _lowPowerAlertSent = false;
+    _normalPowerAlertSent = false;
+}

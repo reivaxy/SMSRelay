@@ -18,6 +18,9 @@ public:
     // Returns the averaged raw ADC value from GPIO00 (pin 36 on ESP32)
     static int readGPIO00ADC();
 
+    // Reset alert sent flags
+    void resetAlertFlags();
+
 private:
     SMSSender    &_sender;
     String        _targetNumber;

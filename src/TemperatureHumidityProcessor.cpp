@@ -124,3 +124,12 @@ String TemperatureHumidityProcessor::getStatus() const
     }
     return "Temp: " + String(_temperature, 1) + "C, Humidity: " + String(_humidity, 1) + "%";
 }
+
+void TemperatureHumidityProcessor::resetAlertFlags()
+{
+    log_i("Resetting temperature and humidity alert flags");
+    _tempHighAlertSent = false;
+    _tempLowAlertSent = false;
+    _humidityHighAlertSent = false;
+    _humidityLowAlertSent = false;
+}

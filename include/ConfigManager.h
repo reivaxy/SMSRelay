@@ -15,7 +15,9 @@ public:
         HUMIDITY_LOW,       // Humidity low threshold (float, percentage)
         BAT_ADC_THRESHOLD,  // Battery power detection threshold (int, ADC value)
         BAT_ADC_NEAR_EMPTY, // Battery near empty threshold (int, ADC value)
-        POWER_ADC_THRESHOLD // Main power detection threshold (int, ADC value)
+        POWER_ADC_THRESHOLD,// Main power detection threshold (int, ADC value)
+        TEMP_OFFSET,        // Temperature offset for sensor calibration (float, Celsius, can be negative)
+        HUMIDITY_OFFSET     // Humidity offset for sensor calibration (float, percentage, can be negative)
     };
 
     // Default values
@@ -27,6 +29,8 @@ public:
         static constexpr int BAT_ADC_THRESHOLD = 2330;
         static constexpr int BAT_ADC_NEAR_EMPTY = 1800;
         static constexpr int POWER_ADC_THRESHOLD = 2000;
+        static constexpr float TEMP_OFFSET = 0.0f;
+        static constexpr float HUMIDITY_OFFSET = 0.0f;
     };
 
     ConfigManager();

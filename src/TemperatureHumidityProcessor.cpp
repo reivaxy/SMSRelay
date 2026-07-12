@@ -37,9 +37,14 @@ void TemperatureHumidityProcessor::readSensor()
         return;
     }
 
-    _temperature = temp;
-    _humidity    = hum;
-    log_i("DHT22 - Temp: %.1f°C, Humidity: %.1f%%", _temperature, _humidity);
+    // Apply sensor offsets (calibration adjustments)
+    float tempOffset = _configManager.getFloat(ConfigManager::Param::TEMP_OFFSET);
+    float humidityOffset = _configManager.getFloat(ConfigManager::Param::HUMIDITY_OFFSET);
+    
+    _temperature = temp + tempOffset;
+    _humidity    = hum + humidityOffset;
+    log_i("DHT22 - Temp: %.1f°C (raw: %.1f°C, offset: %+.1f°C), Humidity: %.1f%% (raw: %.1f%%, offset: %+.1f%%)", 
+          _temperature, temp, tempOffset, _humidity, hum, humidityOffset);
 }
 
 void TemperatureHumidityProcessor::checkThresholds()

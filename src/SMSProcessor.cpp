@@ -282,6 +282,19 @@ void SMSProcessor::handleWriteConfigCommand(const String &rest)
         confirmMsg = "OK: Humidity Low set to " + String(val, 1) + "%";
         success = true;
     } 
+    // Sensor offsets (calibration)
+    else if (paramName == "TEMP_OFFSET") {
+        float val = valueStr.toFloat();
+        _configManager.setFloat(ConfigManager::Param::TEMP_OFFSET, val);
+        confirmMsg = "OK: Temp Offset set to " + String(val, 1) + "°C";
+        success = true;
+    } 
+    else if (paramName == "HUMIDITY_OFFSET") {
+        float val = valueStr.toFloat();
+        _configManager.setFloat(ConfigManager::Param::HUMIDITY_OFFSET, val);
+        confirmMsg = "OK: Humidity Offset set to " + String(val, 1) + "%";
+        success = true;
+    } 
     // Battery thresholds
     else if (paramName == "BAT_ADC_THRESHOLD") {
         int val = valueStr.toInt();
@@ -307,7 +320,7 @@ void SMSProcessor::handleWriteConfigCommand(const String &rest)
         log_i("[CMD] %s", confirmMsg.c_str());
         _sender.send(_targetNumber, confirmMsg);
     } else {
-        String errorMsg = "ERROR: Unknown parameter: " + paramName + "\nValid: TEMP_HIGH, TEMP_LOW, HUMIDITY_HIGH, HUMIDITY_LOW, BAT_ADC_THRESHOLD, BAT_ADC_NEAR_EMPTY, POWER_ADC_THRESHOLD";
+        String errorMsg = "ERROR: Unknown parameter: " + paramName + "\nValid: TEMP_HIGH, TEMP_LOW, TEMP_OFFSET, HUMIDITY_HIGH, HUMIDITY_LOW, HUMIDITY_OFFSET, BAT_ADC_THRESHOLD, BAT_ADC_NEAR_EMPTY, POWER_ADC_THRESHOLD";
         log_e("[CMD] %s", errorMsg.c_str());
         _sender.send(_targetNumber, errorMsg);
     }

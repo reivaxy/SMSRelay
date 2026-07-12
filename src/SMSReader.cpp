@@ -210,16 +210,20 @@ void SMSReader::deleteMessage(int index)
     log_i("[OK] SMS at index %d deleted", index);
 }
 
-void SMSReader::check(const String &targetNumber, SMSProcessor &processor, SMSForwarder &forwarder)
+void SMSReader::check(const String &targetNumber, SMSProcessor &processor, SMSForwarder &forwarder, PhoneNumberManager &phoneNumberManager)
 {
     ReceivedSMS sms;
     if (!readNext(sms)) return;
 
     bool forwarded;
-    if (sms.number == targetNumber) {
+    // Check if sender is authorized (root or authorized phone with READ/ADMIN permission)
+    auto permission = phoneNumberManager.getPermission(sms.number);
+    if (permission != PhoneNumberManager::Permission::NONE) {
+        // Authorized user - send to processor for command handling
         processor.process(sms);
         forwarded = true;
     } else {
+        // Unauthorized - forward to target number
         forwarded = forwarder.forward(sms);
     }
 

@@ -3,28 +3,36 @@
 #include "SMSReader.h"
 #include "SMSSender.h"
 #include "MainPowerCheck.h"
+#include "PhoneNumberManager.h"
 
 // Forward declarations
 class TemperatureHumidityProcessor;
 class BatteryProcessor;
 class ConfigManager;
 
-// Handles command SMS received from SMS_TARGET.
-// Supported commands: 
-//   "FOR:<number> <message>" - forward message
+// Handles command SMS received from authorized phone numbers.
+// Supported commands:
+//   READ/ADMIN Permission:
 //   "STATUS" - get device status
+//   "LEVELS" - get sensor levels
+//   "CONFIG" - get all parameters and their current values
+//   "LISTPHONES" - list all authorized phone numbers
+//   "CLEAR" - reset all alert SMS sent flags
+//   "HELP" - display list of available commands
+//
+//   ADMIN Permission Only:
+//   "FOR:<number> <message>" - forward message
 //   "LIST" - list stored messages
 //   "READ <index>" - read message at index
 //   "DELETE <index>" - delete message at index
-//   "LEVELS" - get sensor levels
-//   "CONFIG" - get all parameters and their current values
 //   "CONFIG <param> <value>" - set a threshold parameter
-//   "CLEAR" - reset all alert SMS sent flags
+//   "ADDPHONE <number> admin|read" - add authorized phone number
+//   "REMOVEPHONE <number>" - remove authorized phone number
 class SMSProcessor {
 public:
     SMSProcessor(SMSSender &sender, const String &targetNumber, SMSReader &reader, 
                  MainPowerCheck &mainPowerCheck, BatteryProcessor &batteryProcessor, TemperatureHumidityProcessor &tempHumidityProcessor,
-                 ConfigManager &configManager);
+                 ConfigManager &configManager, PhoneNumberManager &phoneNumberManager);
 
     // Processes a command SMS. The original SMS is always considered handled
     // (caller should delete it regardless of individual command success).
@@ -32,15 +40,25 @@ public:
 
 
 private:
-    void handleForCommand(const String &rest);
-    void handleStatusCommand();
-    void handleListCommand(int skipIndex);
-    void handleReadCommand(int index);
-    void handleDeleteCommand(int index);
-    void handleLevelCommand();
-    void handleReadConfigCommand();
-    void handleWriteConfigCommand(const String &rest);
-    void handleClearCommand();
+    void handleForCommand(const String &rest, const String &senderNumber);
+    void handleStatusCommand(const String &senderNumber);
+    void handleListCommand(int skipIndex, const String &senderNumber);
+    void handleReadCommand(int index, const String &senderNumber);
+    void handleDeleteCommand(int index, const String &senderNumber);
+    void handleLevelCommand(const String &senderNumber);
+    void handleReadConfigCommand(const String &senderNumber);
+    void handleWriteConfigCommand(const String &rest, const String &senderNumber);
+    void handleClearCommand(const String &senderNumber);
+    void handleAddPhoneCommand(const String &rest, const String &senderNumber);
+    void handleRemovePhoneCommand(const String &rest, const String &senderNumber);
+    void handleListPhonesCommand(const String &senderNumber);
+    void handleHelpCommand(const String &senderNumber);
+    
+    // Check if sender has required permission level
+    bool hasPermission(const String &senderNumber, PhoneNumberManager::Permission required);
+    
+    // Send permission denied message
+    void sendPermissionDenied(const String &senderNumber);
 
     SMSSender                       &_sender;
     String                           _targetNumber;
@@ -49,4 +67,5 @@ private:
     BatteryProcessor                 &_batteryProcessor;
     TemperatureHumidityProcessor     &_tempHumidityProcessor;
     ConfigManager                    &_configManager;
+    PhoneNumberManager               &_phoneNumberManager;
 };

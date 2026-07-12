@@ -5,13 +5,15 @@
 
 // Forward declaration
 class ConfigManager;
+class PhoneNumberManager;
 
 // Monitors DHT22 temperature and humidity sensor and sends alert SMS messages.
 // Periodically checks sensor readings and sends alerts when thresholds are exceeded.
 // Uses ConfigManager for dynamic, editable thresholds.
+// Sends alerts to all authorized phone numbers.
 class TemperatureHumidityProcessor {
 public:
-    TemperatureHumidityProcessor(SMSSender &sender, const String &targetNumber, uint8_t pin, ConfigManager &configManager);
+    TemperatureHumidityProcessor(SMSSender &sender, const String &targetNumber, uint8_t pin, ConfigManager &configManager, PhoneNumberManager &phoneNumberManager);
 
     // Initialize the sensor
     void init();
@@ -39,6 +41,7 @@ private:
     DHT        _dht;
     uint8_t    _pin;
     ConfigManager &_configManager;
+    PhoneNumberManager &_phoneNumberManager;
 
     // Current readings
     float       _temperature = 0.0f;

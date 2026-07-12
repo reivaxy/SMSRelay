@@ -8,6 +8,7 @@
  */
 
 #pragma once
+#include <Arduino.h>
 
 #if defined(LILYGO_T_A7670)
 
@@ -78,3 +79,15 @@
 #ifndef MODEM_START_WAIT_MS
     #define MODEM_START_WAIT_MS             3000
 #endif
+
+// Utility function to normalize phone numbers for comparison
+// Ensures consistent format: trims whitespace, removes spaces, ensures + prefix
+inline String normalizePhoneNumber(const String &number) {
+    String normalized = number;
+    normalized.trim();
+    normalized.replace(" ", "");
+    if (normalized.length() > 0 && normalized[0] != '+') {
+        normalized = "+" + normalized;
+    }
+    return normalized;
+}

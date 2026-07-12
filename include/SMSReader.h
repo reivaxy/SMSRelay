@@ -6,6 +6,7 @@
 // Forward declarations to avoid circular includes
 class SMSProcessor;
 class SMSForwarder;
+class PhoneNumberManager;
 
 struct ReceivedSMS {
     String number;
@@ -31,7 +32,8 @@ public:
     void deleteMessage(int index);
 
     // Reads the next SMS, dispatches it to processor or forwarder, and deletes on success.
-    void check(const String &targetNumber, SMSProcessor &processor, SMSForwarder &forwarder);
+    // Checks if sender is authorized to process commands; otherwise forwards.
+    void check(const String &targetNumber, SMSProcessor &processor, SMSForwarder &forwarder, PhoneNumberManager &phoneNumberManager);
 
     static bool isHexUCS2(const String &s);
     static String decodeUCS2Hex(const String &s);

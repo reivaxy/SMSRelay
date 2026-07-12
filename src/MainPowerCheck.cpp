@@ -1,11 +1,12 @@
 #include "MainPowerCheck.h"
 #include "ConfigManager.h"
+#include "PhoneNumberManager.h"
 
 // GPIO36 maps to ADC1_CHANNEL_0 on ESP32
 #define MAIN_POWER_ADC_PIN 36  
 
-MainPowerCheck::MainPowerCheck(SMSSender &sender, const String &targetNumber, ConfigManager &configManager)
-    : _sender(sender), _targetNumber(targetNumber), _configManager(configManager)
+MainPowerCheck::MainPowerCheck(SMSSender &sender, const String &targetNumber, ConfigManager &configManager, PhoneNumberManager &phoneNumberManager)
+    : _sender(sender), _targetNumber(targetNumber), _configManager(configManager), _phoneNumberManager(phoneNumberManager)
 {
     // Configure the ADC pin
 #ifdef MAIN_POWER_ADC_PIN
@@ -31,29 +32,32 @@ void MainPowerCheck::check()
     if (adcValue < powerAdcThreshold && !_lowPowerAlertSent) {
         log_i("Main power low (MainAdcPin=%d), sending SMS alert...", adcValue);
         String alertMsg = "ALERT: Main power level is low (MainAdcPin=" + String(adcValue) + ")";
-        if (_sender.send(_targetNumber, alertMsg)) {
-            log_i("[OK] Low power alert SMS sent successfully");
-            _lowPowerAlertSent = true;
-            _normalPowerAlertSent = false;
-            _lastADCValue = adcValue;
-        } else {
-            log_i("[ERROR] Failed to send low power alert SMS");
+        auto numbers = _phoneNumberManager.getAllNumbers();
+        for (const auto &entry : numbers) {
+            if (_sender.send(entry.number, alertMsg)) {
+                log_i("[OK] Low power alert SMS sent to %s", entry.number.c_str());
+            } else {
+                log_i("[ERROR] Failed to send low power alert SMS to %s", entry.number.c_str());
+            }
         }
+        _lowPowerAlertSent = true;
+        _normalPowerAlertSent = false;
     }
     // Check if level has crossed back above threshold
     else if (adcValue >= powerAdcThreshold && _lowPowerAlertSent && !_normalPowerAlertSent) {
         log_i("Main power restored (MainAdcPin=%d), sending SMS notification...", adcValue);
         String restoreMsg = "NOTIFICATION: Main power level restored (MainAdcPin=" + String(adcValue) + ")";
-        if (_sender.send(_targetNumber, restoreMsg)) {
-            log_i("[OK] Power restored SMS sent successfully");
-            _normalPowerAlertSent = true;
-            _lowPowerAlertSent = false;
-        } else {
-            log_i("[ERROR] Failed to send power restored SMS");
+        auto numbers = _phoneNumberManager.getAllNumbers();
+        for (const auto &entry : numbers) {
+            if (_sender.send(entry.number, restoreMsg)) {
+                log_i("[OK] Power restored SMS sent to %s", entry.number.c_str());
+            } else {
+                log_i("[ERROR] Failed to send power restored SMS to %s", entry.number.c_str());
+            }
         }
+        _normalPowerAlertSent = true;
+        _lowPowerAlertSent = false;
     }
-    
-    _lastADCValue = adcValue;
 
 }
 

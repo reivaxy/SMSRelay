@@ -1,8 +1,9 @@
 #include "TemperatureHumidityProcessor.h"
 #include "ConfigManager.h"
+#include "PhoneNumberManager.h"
 
-TemperatureHumidityProcessor::TemperatureHumidityProcessor(SMSSender &sender, const String &targetNumber, uint8_t pin, ConfigManager &configManager)
-    : _sender(sender), _targetNumber(targetNumber), _dht(pin, DHT22), _pin(pin), _configManager(configManager) {}
+TemperatureHumidityProcessor::TemperatureHumidityProcessor(SMSSender &sender, const String &targetNumber, uint8_t pin, ConfigManager &configManager, PhoneNumberManager &phoneNumberManager)
+    : _sender(sender), _targetNumber(targetNumber), _dht(pin, DHT22), _pin(pin), _configManager(configManager), _phoneNumberManager(phoneNumberManager) {}
 
 void TemperatureHumidityProcessor::init()
 {
@@ -61,13 +62,16 @@ void TemperatureHumidityProcessor::checkThresholds()
     if (_temperature > tempHighThreshold && !_tempHighAlertSent) {
         log_i("High temperature detected (%.1f°C), sending SMS...", _temperature);
         String msg = "ALERT: Temperature high (" + String(_temperature, 1) + "°C)";
-        if (_sender.send(_targetNumber, msg)) {
-            log_i("[OK] High temperature alert sent");
-            _tempHighAlertSent = true;
-            _tempLowAlertSent  = false;
-        } else {
-            log_i("[ERROR] Failed to send high temperature alert");
+        auto numbers = _phoneNumberManager.getAllNumbers();
+        for (const auto &entry : numbers) {
+            if (_sender.send(entry.number, msg)) {
+                log_i("[OK] High temperature alert sent to %s", entry.number.c_str());
+            } else {
+                log_i("[ERROR] Failed to send high temperature alert to %s", entry.number.c_str());
+            }
         }
+        _tempHighAlertSent = true;
+        _tempLowAlertSent  = false;
     } else if (_temperature <= tempHighThreshold - 1.0f && _tempHighAlertSent) {
         log_i("Temperature normalized from high (%.1f°C)", _temperature);
         _tempHighAlertSent = false;
@@ -77,13 +81,16 @@ void TemperatureHumidityProcessor::checkThresholds()
     if (_temperature < tempLowThreshold && !_tempLowAlertSent) {
         log_i("Low temperature detected (%.1f°C), sending SMS...", _temperature);
         String msg = "ALERT: Temperature low (" + String(_temperature, 1) + "°C)";
-        if (_sender.send(_targetNumber, msg)) {
-            log_i("[OK] Low temperature alert sent");
-            _tempLowAlertSent = true;
-            _tempHighAlertSent = false;
-        } else {
-            log_i("[ERROR] Failed to send low temperature alert");
+        auto numbers = _phoneNumberManager.getAllNumbers();
+        for (const auto &entry : numbers) {
+            if (_sender.send(entry.number, msg)) {
+                log_i("[OK] Low temperature alert sent to %s", entry.number.c_str());
+            } else {
+                log_i("[ERROR] Failed to send low temperature alert to %s", entry.number.c_str());
+            }
         }
+        _tempLowAlertSent = true;
+        _tempHighAlertSent = false;
     } else if (_temperature >= tempLowThreshold + 1.0f && _tempLowAlertSent) {
         log_i("Temperature normalized from low (%.1f°C)", _temperature);
         _tempLowAlertSent = false;
@@ -93,13 +100,16 @@ void TemperatureHumidityProcessor::checkThresholds()
     if (_humidity > humidityHighThreshold && !_humidityHighAlertSent) {
         log_i("High humidity detected (%.1f%%), sending SMS...", _humidity);
         String msg = "ALERT: Humidity high (" + String(_humidity, 1) + "%)";
-        if (_sender.send(_targetNumber, msg)) {
-            log_i("[OK] High humidity alert sent");
-            _humidityHighAlertSent = true;
-            _humidityLowAlertSent  = false;
-        } else {
-            log_i("[ERROR] Failed to send high humidity alert");
+        auto numbers = _phoneNumberManager.getAllNumbers();
+        for (const auto &entry : numbers) {
+            if (_sender.send(entry.number, msg)) {
+                log_i("[OK] High humidity alert sent to %s", entry.number.c_str());
+            } else {
+                log_i("[ERROR] Failed to send high humidity alert to %s", entry.number.c_str());
+            }
         }
+        _humidityHighAlertSent = true;
+        _humidityLowAlertSent  = false;
     } else if (_humidity <= humidityHighThreshold - 1.0f && _humidityHighAlertSent) {
         log_i("Humidity normalized from high (%.1f%%)", _humidity);
         _humidityHighAlertSent = false;
@@ -109,13 +119,16 @@ void TemperatureHumidityProcessor::checkThresholds()
     if (_humidity < humidityLowThreshold && !_humidityLowAlertSent) {
         log_i("Low humidity detected (%.1f%%), sending SMS...", _humidity);
         String msg = "ALERT: Humidity low (" + String(_humidity, 1) + "%)";
-        if (_sender.send(_targetNumber, msg)) {
-            log_i("[OK] Low humidity alert sent");
-            _humidityLowAlertSent = true;
-            _humidityHighAlertSent = false;
-        } else {
-            log_i("[ERROR] Failed to send low humidity alert");
+        auto numbers = _phoneNumberManager.getAllNumbers();
+        for (const auto &entry : numbers) {
+            if (_sender.send(entry.number, msg)) {
+                log_i("[OK] Low humidity alert sent to %s", entry.number.c_str());
+            } else {
+                log_i("[ERROR] Failed to send low humidity alert to %s", entry.number.c_str());
+            }
         }
+        _humidityLowAlertSent = true;
+        _humidityHighAlertSent = false;
     } else if (_humidity >= humidityLowThreshold + 1.0f && _humidityLowAlertSent) {
         log_i("Humidity normalized from low (%.1f%%)", _humidity);
         _humidityLowAlertSent = false;

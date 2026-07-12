@@ -31,16 +31,18 @@
 #include "SerialConsole.h"
 #include "TemperatureHumidityProcessor.h"
 #include "ConfigManager.h"
+#include "PhoneNumberManager.h"
 
 Modem                        modem;
 SMSSender                    sender(modem.getModem(), modem.getSerialStream());
 SMSReader                    reader(modem.getModem(), modem.getSerialStream());
 SMSForwarder                 forwarder(sender, SMS_TARGET);
 ConfigManager                configManager;
-BatteryProcessor             batteryProcessor(sender, SMS_TARGET, configManager);
-MainPowerCheck               mainPowerCheck(sender, SMS_TARGET, configManager);
-TemperatureHumidityProcessor tempHumidityProcessor(sender, SMS_TARGET, BOARD_DHT_PIN, configManager);
-SMSProcessor                 processor(sender, SMS_TARGET, reader, mainPowerCheck, batteryProcessor, tempHumidityProcessor, configManager);
+PhoneNumberManager           phoneNumberManager(SMS_TARGET);
+BatteryProcessor             batteryProcessor(sender, SMS_TARGET, configManager, phoneNumberManager);
+MainPowerCheck               mainPowerCheck(sender, SMS_TARGET, configManager, phoneNumberManager);
+TemperatureHumidityProcessor tempHumidityProcessor(sender, SMS_TARGET, BOARD_DHT_PIN, configManager, phoneNumberManager);
+SMSProcessor                 processor(sender, SMS_TARGET, reader, mainPowerCheck, batteryProcessor, tempHumidityProcessor, configManager, phoneNumberManager);
 SerialConsole                console(reader, forwarder, batteryProcessor, mainPowerCheck, configManager);
 
 void setup()
@@ -49,9 +51,12 @@ void setup()
 
     // Initialize configuration manager for persistent storage
     configManager.init();
+
+    // Initialize phone number manager for authorized numbers
+    phoneNumberManager.init();
     
-        // Initialize temperature and humidity sensor
-        tempHumidityProcessor.init();
+    // Initialize temperature and humidity sensor
+    tempHumidityProcessor.init();
 
     // Initialize modem hardware, serial communication, network, and SMS configuration
     if (!modem.init()) {
@@ -59,14 +64,16 @@ void setup()
         return;
     }
 
-    // Send power-on notification
+    // Send power-on notification to all authorized numbers
     log_i("Sending power-on notification...");
     String powerOnMsg = "Device powered on";
-
-    if (modem.getModem().sendSMS(SMS_TARGET, powerOnMsg)) {
-        log_i("[OK] Power-on SMS sent successfully");
-    } else {
-        log_i("[ERROR] Failed to send power-on SMS");
+    
+    for (const auto &entry : phoneNumberManager.getAllNumbers()) {
+        if (modem.getModem().sendSMS(entry.number, powerOnMsg)) {
+            log_i("[OK] Power-on SMS sent to %s", entry.number.c_str());
+        } else {
+            log_i("[ERROR] Failed to send power-on SMS to %s", entry.number.c_str());
+        }
     }
 }
 
@@ -86,7 +93,7 @@ void loop()
     if (millis() - lastCheck > 2000) {
         lastCheck = millis();
         if (modem.isConnected()) {
-            reader.check(SMS_TARGET, processor, forwarder);
+            reader.check(SMS_TARGET, processor, forwarder, phoneNumberManager);
         }
     }
 

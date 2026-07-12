@@ -1,8 +1,9 @@
 #include "BatteryProcessor.h"
 #include "ConfigManager.h"
+#include "PhoneNumberManager.h"
 
-BatteryProcessor::BatteryProcessor(SMSSender &sender, const String &targetNumber, ConfigManager &configManager)
-    : _sender(sender), _targetNumber(targetNumber), _configManager(configManager) {}
+BatteryProcessor::BatteryProcessor(SMSSender &sender, const String &targetNumber, ConfigManager &configManager, PhoneNumberManager &phoneNumberManager)
+    : _sender(sender), _targetNumber(targetNumber), _configManager(configManager), _phoneNumberManager(phoneNumberManager) {}
 
 void BatteryProcessor::check()
 {
@@ -17,23 +18,31 @@ void BatteryProcessor::check()
     if (adcValue > 0 && adcValue < batAdcThreshold) {
         if (adcValue < batAdcNearEmpty && !_nearEmptyAlertSent) {
             log_i("Battery near empty (BatteryAdcPin=%d), sending SMS...", adcValue);
-            if (_sender.send(_targetNumber, "Battery near empty (BatteryAdcPin=" + String(adcValue) + ")")) {
-                log_i("[OK] Battery near empty SMS sent successfully");
-                _nearEmptyAlertSent = true;
-                _lastAlertADC = adcValue;
-            } else {
-                log_i("[ERROR] Failed to send battery near empty SMS");
+            String msg = "Battery near empty (BatteryAdcPin=" + String(adcValue) + ")";
+            auto numbers = _phoneNumberManager.getAllNumbers();
+            for (const auto &entry : numbers) {
+                if (_sender.send(entry.number, msg)) {
+                    log_i("[OK] Battery near empty SMS sent to %s", entry.number.c_str());
+                } else {
+                    log_i("[ERROR] Failed to send battery near empty SMS to %s", entry.number.c_str());
+                }
             }
+            _nearEmptyAlertSent = true;
+            _lastAlertADC = adcValue;
         } else if (!_batteryAlertSent) {
             log_i("Battery power detected (BatteryAdcPin=%d), sending SMS...", adcValue);
-            if (_sender.send(_targetNumber, "Device is now on battery power (BatteryAdcPin=" + String(adcValue) + ")")) {
-                log_i("[OK] Battery alert SMS sent successfully");
-                _batteryAlertSent = true;
-                _usbAlertSent = false;
-                _lastAlertADC = adcValue;
-            } else {
-                log_i("[ERROR] Failed to send battery alert SMS");
+            String msg = "Device is now on battery power (BatteryAdcPin=" + String(adcValue) + ")";
+            auto numbers = _phoneNumberManager.getAllNumbers();
+            for (const auto &entry : numbers) {
+                if (_sender.send(entry.number, msg)) {
+                    log_i("[OK] Battery alert SMS sent to %s", entry.number.c_str());
+                } else {
+                    log_i("[ERROR] Failed to send battery alert SMS to %s", entry.number.c_str());
+                }
             }
+            _batteryAlertSent = true;
+            _usbAlertSent = false;
+            _lastAlertADC = adcValue;
         } else if (_lastAlertADC - adcValue >= 20) {
             // Use this to find out the best value for BAT_ADC_NEAR_EMPTY_THRESHOLD
             // log_i("Battery level dropped (ADC=%d, last alert ADC=%d), sending SMS...", adcValue, _lastAlertADC);
@@ -47,12 +56,16 @@ void BatteryProcessor::check()
     } else {
         if (!_usbAlertSent && _batteryAlertSent) {
             log_i("Back on USB power, sending SMS...");
-            if (_sender.send(_targetNumber, "Device is now on USB power")) {
-                log_i("[OK] USB alert SMS sent successfully");
-                _usbAlertSent = true;
-            } else {
-                log_i("[ERROR] Failed to send USB alert SMS");
+            String msg = "Device is now on USB power";
+            auto numbers = _phoneNumberManager.getAllNumbers();
+            for (const auto &entry : numbers) {
+                if (_sender.send(entry.number, msg)) {
+                    log_i("[OK] USB alert SMS sent to %s", entry.number.c_str());
+                } else {
+                    log_i("[ERROR] Failed to send USB alert SMS to %s", entry.number.c_str());
+                }
             }
+            _usbAlertSent = true;
         }
         _batteryAlertSent   = false;
         _nearEmptyAlertSent = false;

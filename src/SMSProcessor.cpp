@@ -7,9 +7,10 @@
 
 SMSProcessor::SMSProcessor(SMSSender &sender, const String &targetNumber, SMSReader &reader, 
                            MainPowerCheck &mainPowerCheck, BatteryProcessor &batteryProcessor, TemperatureHumidityProcessor &tempHumidityProcessor,
-                           ConfigManager &configManager)
+                           ConfigManager &configManager, PhoneNumberManager &phoneNumberManager)
     : _sender(sender), _targetNumber(targetNumber), _reader(reader), _mainPowerCheck(mainPowerCheck),
-      _batteryProcessor(batteryProcessor), _tempHumidityProcessor(tempHumidityProcessor), _configManager(configManager) {}
+      _batteryProcessor(batteryProcessor), _tempHumidityProcessor(tempHumidityProcessor), 
+      _configManager(configManager), _phoneNumberManager(phoneNumberManager) {}
 
 void SMSProcessor::process(const ReceivedSMS &sms)
 {
@@ -17,38 +18,101 @@ void SMSProcessor::process(const ReceivedSMS &sms)
     textUpper.trim();
     textUpper.toUpperCase();
 
-    if (textUpper.startsWith("FOR:")) {
-        handleForCommand(sms.text.substring(4));
-    } else if (textUpper == "STATUS") {
-        handleStatusCommand();
-    } else if (textUpper == "LEVELS") {
-        handleLevelCommand();
-    } else if (textUpper == "LIST") {
-        handleListCommand(sms.index);
-    } else if (textUpper == "CONFIG") {
-        handleReadConfigCommand();
-    } else if (textUpper.startsWith("CONFIG ")) {
-        handleWriteConfigCommand(sms.text.substring(7));
-    } else if (textUpper.startsWith("READ ")) {
+    // Log who's sending the command
+    auto perm = _phoneNumberManager.getPermission(sms.number);
+    String permStr = (perm == PhoneNumberManager::Permission::ADMIN) ? "ADMIN" : 
+                     (perm == PhoneNumberManager::Permission::READ) ? "READ" : "NONE";
+    log_i("[CMD] From: %s (Permission: %s)", sms.number.c_str(), permStr.c_str());
+
+    // Check basic authorization
+    if (perm == PhoneNumberManager::Permission::NONE) {
+        log_w("[CMD] Unauthorized sender: %s", sms.number.c_str());
+        _sender.send(sms.number, "ERROR: Not authorized");
+        return;
+    }
+
+    // Commands that require ADMIN permission
+    if (textUpper.startsWith("CONFIG ")) {
+        if (!hasPermission(sms.number, PhoneNumberManager::Permission::ADMIN)) {
+            sendPermissionDenied(sms.number);
+            return;
+        }
+        handleWriteConfigCommand(sms.text.substring(7), sms.number);
+    } 
+    else if (textUpper.startsWith("ADDPHONE ")) {
+        if (!hasPermission(sms.number, PhoneNumberManager::Permission::ADMIN)) {
+            sendPermissionDenied(sms.number);
+            return;
+        }
+        handleAddPhoneCommand(sms.text.substring(9), sms.number);
+    }
+    else if (textUpper.startsWith("REMOVEPHONE ")) {
+        if (!hasPermission(sms.number, PhoneNumberManager::Permission::ADMIN)) {
+            sendPermissionDenied(sms.number);
+            return;
+        }
+        handleRemovePhoneCommand(sms.text.substring(12), sms.number);
+    }
+    else if (textUpper.startsWith("FOR:")) {
+        if (!hasPermission(sms.number, PhoneNumberManager::Permission::ADMIN)) {
+            sendPermissionDenied(sms.number);
+            return;
+        }
+        handleForCommand(sms.text.substring(4), sms.number);
+    }
+    else if (textUpper == "LIST") {
+        if (!hasPermission(sms.number, PhoneNumberManager::Permission::ADMIN)) {
+            sendPermissionDenied(sms.number);
+            return;
+        }
+        handleListCommand(sms.index, sms.number);
+    }
+    else if (textUpper.startsWith("READ ")) {
+        if (!hasPermission(sms.number, PhoneNumberManager::Permission::ADMIN)) {
+            sendPermissionDenied(sms.number);
+            return;
+        }
         int index = sms.text.substring(5).toInt();
         if (index > 0) {
-            handleReadCommand(index);
+            handleReadCommand(index, sms.number);
         } else {
-            _sender.send(_targetNumber, "ERROR: read: invalid index");
+            _sender.send(sms.number, "ERROR: read: invalid index");
         }
-    } else if (textUpper.startsWith("DELETE ")) {
+    }
+    else if (textUpper.startsWith("DELETE ")) {
+        if (!hasPermission(sms.number, PhoneNumberManager::Permission::ADMIN)) {
+            sendPermissionDenied(sms.number);
+            return;
+        }
         int index = sms.text.substring(7).toInt();
         if (index > 0) {
-            handleDeleteCommand(index);
+            handleDeleteCommand(index, sms.number);
         } else {
-            _sender.send(_targetNumber, "ERROR: delete: invalid index");
+            _sender.send(sms.number, "ERROR: delete: invalid index");
         }
-    } else if (textUpper == "CLEAR") {
-        handleClearCommand();
+    }
+    // Commands that work with READ or ADMIN permission
+    else if (textUpper == "STATUS") {
+        handleStatusCommand(sms.number);
+    } 
+    else if (textUpper == "LEVELS") {
+        handleLevelCommand(sms.number);
+    } 
+    else if (textUpper == "CONFIG") {
+        handleReadConfigCommand(sms.number);
+    } 
+    else if (textUpper == "LISTPHONES") {
+        handleListPhonesCommand(sms.number);
+    }
+    else if (textUpper == "CLEAR") {
+        handleClearCommand(sms.number);
+    }
+    else if (textUpper == "HELP") {
+        handleHelpCommand(sms.number);
     }
 }
 
-void SMSProcessor::handleForCommand(const String &rest)
+void SMSProcessor::handleForCommand(const String &rest, const String &senderNumber)
 {
     String trimmed = rest;
     trimmed.trim();
@@ -82,28 +146,28 @@ void SMSProcessor::handleForCommand(const String &rest)
 }
 
 
-void SMSProcessor::handleReadCommand(int index)
+void SMSProcessor::handleReadCommand(int index, const String &senderNumber)
 {
     log_i("[CMD] Read query for index %d", index);
     ReceivedSMS sms;
     if (!_reader.readAt(index, sms)) {
-        _sender.send(_targetNumber, "ERROR: No message at index " + String(index));
+        _sender.send(senderNumber, "ERROR: No message at index " + String(index));
         return;
     }
     String msg = "[" + String(sms.index) + "] From: " + sms.number +
                  "\nTime: " + sms.timestamp +
                  "\n" + sms.text;
-    _sender.send(_targetNumber, msg);
+    _sender.send(senderNumber, msg);
 }
 
-void SMSProcessor::handleDeleteCommand(int index)
+void SMSProcessor::handleDeleteCommand(int index, const String &senderNumber)
 {
     log_i("[CMD] Delete query for index %d", index);
     _reader.deleteMessage(index);
-    _sender.send(_targetNumber, "OK: Message " + String(index) + " deleted");
+    _sender.send(senderNumber, "OK: Message " + String(index) + " deleted");
 }
 
-void SMSProcessor::handleStatusCommand()
+void SMSProcessor::handleStatusCommand(const String &senderNumber)
 {
     log_i("[CMD] Status query received");
 
@@ -123,10 +187,10 @@ void SMSProcessor::handleStatusCommand()
     statusMsg += "Main Power: " + String(mainAdcValue) + " (" + mainStatus + ")";
 
     log_i("[CMD] %s", statusMsg.c_str());
-    _sender.send(_targetNumber, statusMsg);
+    _sender.send(senderNumber, statusMsg);
 }
 
-void SMSProcessor::handleListCommand(int skipIndex)
+void SMSProcessor::handleListCommand(int skipIndex, const String &senderNumber)
 {
     log_i("[CMD] List query received");
 
@@ -146,14 +210,14 @@ void SMSProcessor::handleListCommand(int skipIndex)
     }
 
     if (found == 0) {
-        _sender.send(_targetNumber, "No messages stored");
+        _sender.send(senderNumber, "No messages stored");
         return;
     }
 
-    _sender.send(_targetNumber, response);
+    _sender.send(senderNumber, response);
 }
 
-void SMSProcessor::handleLevelCommand()
+void SMSProcessor::handleLevelCommand(const String &senderNumber)
 {
     log_i("[CMD] Level query received");
     
@@ -218,18 +282,18 @@ void SMSProcessor::handleLevelCommand()
     }
     
     log_i("[CMD] %s", levelMsg.c_str());
-    _sender.send(_targetNumber, levelMsg);
+    _sender.send(senderNumber, levelMsg);
 }
 
-void SMSProcessor::handleReadConfigCommand()
+void SMSProcessor::handleReadConfigCommand(const String &senderNumber)
 {
     log_i("[CMD] Config query received");
     String configMsg = _configManager.getAllParams();
     log_i("[CMD] %s", configMsg.c_str());
-    _sender.send(_targetNumber, configMsg);
+    _sender.send(senderNumber, configMsg);
 }
 
-void SMSProcessor::handleWriteConfigCommand(const String &rest)
+void SMSProcessor::handleWriteConfigCommand(const String &rest, const String &senderNumber)
 {
     String trimmed = rest;
     trimmed.trim();
@@ -239,7 +303,7 @@ void SMSProcessor::handleWriteConfigCommand(const String &rest)
     
     int spaceIdx = trimmed.indexOf(' ');
     if (spaceIdx <= 0) {
-        _sender.send(_targetNumber, "ERROR: CONFIG syntax: CONFIG <param> <value>");
+        _sender.send(senderNumber, "ERROR: CONFIG syntax: CONFIG <param> <value>");
         return;
     }
     
@@ -249,7 +313,7 @@ void SMSProcessor::handleWriteConfigCommand(const String &rest)
     valueStr.trim();
 
     if (valueStr.length() == 0) {
-        _sender.send(_targetNumber, "ERROR: CONFIG: missing value");
+        _sender.send(senderNumber, "ERROR: CONFIG: missing value");
         return;
     }
     
@@ -318,15 +382,15 @@ void SMSProcessor::handleWriteConfigCommand(const String &rest)
     
     if (success) {
         log_i("[CMD] %s", confirmMsg.c_str());
-        _sender.send(_targetNumber, confirmMsg);
+        _sender.send(senderNumber, confirmMsg);
     } else {
         String errorMsg = "ERROR: Unknown parameter: " + paramName + "\nValid: TEMP_HIGH, TEMP_LOW, TEMP_OFFSET, HUMIDITY_HIGH, HUMIDITY_LOW, HUMIDITY_OFFSET, BAT_ADC_THRESHOLD, BAT_ADC_NEAR_EMPTY, POWER_ADC_THRESHOLD";
         log_e("[CMD] %s", errorMsg.c_str());
-        _sender.send(_targetNumber, errorMsg);
+        _sender.send(senderNumber, errorMsg);
     }
 }
 
-void SMSProcessor::handleClearCommand()
+void SMSProcessor::handleClearCommand(const String &senderNumber)
 {
     log_i("[CMD] Clear alert flags received");
     
@@ -336,6 +400,111 @@ void SMSProcessor::handleClearCommand()
     _mainPowerCheck.resetAlertFlags();
     
     log_i("[OK] All alert SMS sent flags cleared");
-    _sender.send(_targetNumber, "OK: All alert SMS flags cleared");
+    _sender.send(senderNumber, "OK: All alert SMS flags cleared");
+}
+
+bool SMSProcessor::hasPermission(const String &senderNumber, PhoneNumberManager::Permission required) {
+    auto actualPerm = _phoneNumberManager.getPermission(senderNumber);
+    return (int)actualPerm >= (int)required;
+}
+
+void SMSProcessor::sendPermissionDenied(const String &senderNumber) {
+    log_w("[CMD] Permission denied for: %s", senderNumber.c_str());
+    _sender.send(senderNumber, "ERROR: Admin permission required for this command");
+}
+
+void SMSProcessor::handleAddPhoneCommand(const String &rest, const String &senderNumber) {
+    String trimmed = rest;
+    trimmed.trim();
+    
+    // Parse: "ADDPHONE <number> admin|read"
+    int spaceIdx = trimmed.indexOf(' ');
+    if (spaceIdx <= 0) {
+        _sender.send(senderNumber, "ERROR: ADDPHONE syntax: ADDPHONE <number> admin|read");
+        return;
+    }
+    
+    String number = trimmed.substring(0, spaceIdx);
+    number.trim();
+    String permStr = trimmed.substring(spaceIdx + 1);
+    permStr.trim();
+    permStr.toUpperCase();
+    
+    PhoneNumberManager::Permission perm;
+    if (permStr == "ADMIN") {
+        perm = PhoneNumberManager::Permission::ADMIN;
+    } else if (permStr == "READ") {
+        perm = PhoneNumberManager::Permission::READ;
+    } else {
+        _sender.send(senderNumber, "ERROR: Permission must be 'admin' or 'read'");
+        return;
+    }
+    
+    if (_phoneNumberManager.addPhoneNumber(number, perm)) {
+        log_i("[CMD] Phone added: %s with %s permission", number.c_str(), permStr.c_str());
+        _sender.send(senderNumber, "OK: Phone " + number + " added with " + permStr + " permission");
+        _sender.send(number, "Phone number added to SMS Relay with " + permStr + " permission");
+    } else {
+        _sender.send(senderNumber, "ERROR: Failed to add phone (max 5 additional numbers allowed)");
+    }
+}
+
+void SMSProcessor::handleRemovePhoneCommand(const String &rest, const String &senderNumber) {
+    String number = rest;
+    number.trim();
+    
+    if (number.length() == 0) {
+        _sender.send(senderNumber, "ERROR: REMOVEPHONE syntax: REMOVEPHONE <number>");
+        return;
+    }
+    
+    if (_phoneNumberManager.removePhoneNumber(number)) {
+        log_i("[CMD] Phone removed: %s", number.c_str());
+        _sender.send(senderNumber, "OK: Phone " + number + " removed");
+    } else {
+        _sender.send(senderNumber, "ERROR: Phone not found or is root");
+    }
+}
+
+void SMSProcessor::handleListPhonesCommand(const String &senderNumber) {
+    log_i("[CMD] List phones requested");
+    String response = _phoneNumberManager.getFormattedList();
+    _sender.send(senderNumber, response);
+}
+
+void SMSProcessor::handleHelpCommand(const String &senderNumber) {
+    log_i("[CMD] Help command received");
+    
+    auto perm = _phoneNumberManager.getPermission(senderNumber);
+    String helpMsg = "Available Commands:\n\n";
+    
+    // Commands accessible to both READ and ADMIN
+    helpMsg += "STATUS - Device status\n";
+    helpMsg += "LEVELS - Sensor levels\n";
+    helpMsg += "CONFIG - View params\n";
+    helpMsg += "LISTPHONES - List phones\n";
+    helpMsg += "CLEAR - Reset alerts\n";
+    
+    // Admin-only commands
+    if (perm == PhoneNumberManager::Permission::ADMIN) {
+        helpMsg += "\nADMIN:\n";
+        helpMsg += "LIST - List messages\n";
+        helpMsg += "READ <i> - Read msg i\n";
+        helpMsg += "DELETE <i> - Delete msg i\n";
+        helpMsg += "FOR:<num> <msg> - Forward\n";
+        helpMsg += "CONFIG <p> <v> - Set param\n";
+        helpMsg += "ADDPHONE <n> <p> - Add phone\n";
+        helpMsg += "REMOVEPHONE <n> - Remove\n";
+        
+        helpMsg += "\nParams: TEMP_HIGH, TEMP_LOW,\n";
+        helpMsg += "TEMP_OFFSET, HUMIDITY_HIGH,\n";
+        helpMsg += "HUMIDITY_LOW, HUMIDITY_OFFSET,\n";
+        helpMsg += "BAT_ADC_THRESHOLD,\n";
+        helpMsg += "BAT_ADC_NEAR_EMPTY,\n";
+        helpMsg += "POWER_ADC_THRESHOLD";
+    }
+    
+    log_i("[CMD] Help displayed");
+    _sender.send(senderNumber, helpMsg);
 }
 

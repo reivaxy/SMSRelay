@@ -53,6 +53,20 @@ void SMSProcessor::process(const ReceivedSMS &sms)
         }
         handleRemovePhoneCommand(sms.text.substring(12), sms.number);
     }
+    else if (textUpper.startsWith("MUTE ")) {
+        if (!hasPermission(sms.number, PhoneNumberManager::Permission::ADMIN)) {
+            sendPermissionDenied(sms.number);
+            return;
+        }
+        handleMuteCommand(sms.text.substring(5), sms.number);
+    }
+    else if (textUpper.startsWith("UNMUTE ")) {
+        if (!hasPermission(sms.number, PhoneNumberManager::Permission::ADMIN)) {
+            sendPermissionDenied(sms.number);
+            return;
+        }
+        handleUnmuteCommand(sms.text.substring(7), sms.number);
+    }
     else if (textUpper.startsWith("FOR:")) {
         if (!hasPermission(sms.number, PhoneNumberManager::Permission::ADMIN)) {
             sendPermissionDenied(sms.number);
@@ -417,17 +431,33 @@ void SMSProcessor::handleAddPhoneCommand(const String &rest, const String &sende
     String trimmed = rest;
     trimmed.trim();
     
-    // Parse: "ADDPHONE <number> admin|read"
+    // Parse: "ADDPHONE <number> admin|read [alias]"
     int spaceIdx = trimmed.indexOf(' ');
     if (spaceIdx <= 0) {
-        _sender.send(senderNumber, "ERROR: ADDPHONE syntax: ADDPHONE <number> admin|read");
+        _sender.send(senderNumber, "ERROR: ADDPHONE syntax: ADDPHONE <number> admin|read [alias]");
         return;
     }
     
     String number = trimmed.substring(0, spaceIdx);
     number.trim();
-    String permStr = trimmed.substring(spaceIdx + 1);
-    permStr.trim();
+    
+    String rest2 = trimmed.substring(spaceIdx + 1);
+    rest2.trim();
+    
+    int spaceIdx2 = rest2.indexOf(' ');
+    String permStr, alias;
+    
+    if (spaceIdx2 <= 0) {
+        // No alias provided
+        permStr = rest2;
+        alias = "";
+    } else {
+        // Alias provided
+        permStr = rest2.substring(0, spaceIdx2);
+        alias = rest2.substring(spaceIdx2 + 1);
+        alias.trim();
+    }
+    
     permStr.toUpperCase();
     
     PhoneNumberManager::Permission perm;
@@ -440,29 +470,33 @@ void SMSProcessor::handleAddPhoneCommand(const String &rest, const String &sende
         return;
     }
     
-    if (_phoneNumberManager.addPhoneNumber(number, perm)) {
+    if (_phoneNumberManager.addPhoneNumber(number, perm, alias)) {
         log_i("[CMD] Phone added: %s with %s permission", number.c_str(), permStr.c_str());
-        _sender.send(senderNumber, "OK: Phone " + number + " added with " + permStr + " permission");
-        _sender.send(number, "Phone number added to SMS Relay with " + permStr + " permission");
+        String confirmMsg = "OK: Phone " + number + " added with " + permStr + " permission";
+        if (alias.length() > 0) {
+            confirmMsg += " (alias: " + alias + ")";
+        }
+        _sender.send(senderNumber, confirmMsg);
+        _sender.send(number, "Phone number added to SMS Relay with " + permStr + " permission\nSend HELP for the list of commands");
     } else {
         _sender.send(senderNumber, "ERROR: Failed to add phone (max 5 additional numbers allowed)");
     }
 }
 
 void SMSProcessor::handleRemovePhoneCommand(const String &rest, const String &senderNumber) {
-    String number = rest;
-    number.trim();
+    String param = rest;
+    param.trim();
     
-    if (number.length() == 0) {
-        _sender.send(senderNumber, "ERROR: REMOVEPHONE syntax: REMOVEPHONE <number>");
+    if (param.length() == 0) {
+        _sender.send(senderNumber, "ERROR: REMOVEPHONE syntax: REMOVEPHONE <index|number>");
         return;
     }
     
-    if (_phoneNumberManager.removePhoneNumber(number)) {
-        log_i("[CMD] Phone removed: %s", number.c_str());
-        _sender.send(senderNumber, "OK: Phone " + number + " removed");
+    if (_phoneNumberManager.removePhoneNumber(param)) {
+        log_i("[CMD] Phone removed: %s", param.c_str());
+        _sender.send(senderNumber, "OK: Phone " + param + " removed");
     } else {
-        _sender.send(senderNumber, "ERROR: Phone not found or is root");
+        _sender.send(senderNumber, "ERROR: Phone not found, is root, or invalid index. Run LISTPHONES to see available entries");
     }
 }
 
@@ -493,10 +527,16 @@ void SMSProcessor::handleHelpCommand(const String &senderNumber) {
         helpMsg += "DELETE <i> - Delete msg i\n";
         helpMsg += "FOR:<num> <msg> - Forward\n";
         helpMsg += "CONFIG <p> <v> - Set param\n";
-        helpMsg += "ADDPHONE <n> <p> - Add phone\n";
-        helpMsg += "REMOVEPHONE <n> - Remove\n";
+        helpMsg += "ADDPHONE <n><p>[a] - Add\n";
+        helpMsg += "REMOVEPHONE <i|n> - Remove\n";
+        helpMsg += "MUTE <i|n> - Mute alerts\n";
+        helpMsg += "UNMUTE <i|n> - Unmute alerts\n";
+        helpMsg += "\nLegend:\n";
+        helpMsg += "<i|n>=index/number\n";
+        helpMsg += "<p>=admin|read\n";
+        helpMsg += "[a]=opt alias";
         
-        helpMsg += "\nParams: TEMP_HIGH, TEMP_LOW,\n";
+        helpMsg += "\n\nParams: TEMP_HIGH, TEMP_LOW,\n";
         helpMsg += "TEMP_OFFSET, HUMIDITY_HIGH,\n";
         helpMsg += "HUMIDITY_LOW, HUMIDITY_OFFSET,\n";
         helpMsg += "BAT_ADC_THRESHOLD,\n";
@@ -506,5 +546,39 @@ void SMSProcessor::handleHelpCommand(const String &senderNumber) {
     
     log_i("[CMD] Help displayed");
     _sender.send(senderNumber, helpMsg);
+}
+
+void SMSProcessor::handleMuteCommand(const String &rest, const String &senderNumber) {
+    String param = rest;
+    param.trim();
+    
+    if (param.length() == 0) {
+        _sender.send(senderNumber, "ERROR: MUTE syntax: MUTE <index|number>");
+        return;
+    }
+    
+    if (_phoneNumberManager.muteNumber(param)) {
+        log_i("[CMD] Phone muted: %s", param.c_str());
+        _sender.send(senderNumber, "OK: Phone " + param + " muted (won't receive alerts)");
+    } else {
+        _sender.send(senderNumber, "ERROR: Phone not found or invalid index. Run LISTPHONES to see available entries");
+    }
+}
+
+void SMSProcessor::handleUnmuteCommand(const String &rest, const String &senderNumber) {
+    String param = rest;
+    param.trim();
+    
+    if (param.length() == 0) {
+        _sender.send(senderNumber, "ERROR: UNMUTE syntax: UNMUTE <index|number>");
+        return;
+    }
+    
+    if (_phoneNumberManager.unmuteNumber(param)) {
+        log_i("[CMD] Phone unmuted: %s", param.c_str());
+        _sender.send(senderNumber, "OK: Phone " + param + " unmuted (will receive alerts)");
+    } else {
+        _sender.send(senderNumber, "ERROR: Phone not found or invalid index. Run LISTPHONES to see available entries");
+    }
 }
 

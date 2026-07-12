@@ -34,10 +34,14 @@ void MainPowerCheck::check()
         String alertMsg = "ALERT: Main power level is low (MainAdcPin=" + String(adcValue) + ")";
         auto numbers = _phoneNumberManager.getAllNumbers();
         for (const auto &entry : numbers) {
-            if (_sender.send(entry.number, alertMsg)) {
-                log_i("[OK] Low power alert SMS sent to %s", entry.number.c_str());
+            if (!_phoneNumberManager.isMuted(entry.number)) {
+                if (_sender.send(entry.number, alertMsg)) {
+                    log_i("[OK] Low power alert SMS sent to %s", entry.number.c_str());
+                } else {
+                    log_i("[ERROR] Failed to send low power alert SMS to %s", entry.number.c_str());
+                }
             } else {
-                log_i("[ERROR] Failed to send low power alert SMS to %s", entry.number.c_str());
+                log_i("[MUTED] Low power alert SMS not sent to %s (muted)", entry.number.c_str());
             }
         }
         _lowPowerAlertSent = true;
@@ -49,10 +53,14 @@ void MainPowerCheck::check()
         String restoreMsg = "NOTIFICATION: Main power level restored (MainAdcPin=" + String(adcValue) + ")";
         auto numbers = _phoneNumberManager.getAllNumbers();
         for (const auto &entry : numbers) {
-            if (_sender.send(entry.number, restoreMsg)) {
-                log_i("[OK] Power restored SMS sent to %s", entry.number.c_str());
+            if (!_phoneNumberManager.isMuted(entry.number)) {
+                if (_sender.send(entry.number, restoreMsg)) {
+                    log_i("[OK] Power restored SMS sent to %s", entry.number.c_str());
+                } else {
+                    log_i("[ERROR] Failed to send power restored SMS to %s", entry.number.c_str());
+                }
             } else {
-                log_i("[ERROR] Failed to send power restored SMS to %s", entry.number.c_str());
+                log_i("[MUTED] Power restored SMS not sent to %s (muted)", entry.number.c_str());
             }
         }
         _normalPowerAlertSent = true;

@@ -28,6 +28,8 @@ class ConfigManager;
 //   "CONFIG <param> <value>" - set a threshold parameter
 //   "ADDPHONE <number> admin|read" - add authorized phone number
 //   "REMOVEPHONE <number>" - remove authorized phone number
+//   "MUTE <number>" - mute phone number from receiving alerts
+//   "UNMUTE <number>" - unmute phone number to receive alerts
 class SMSProcessor {
 public:
     SMSProcessor(SMSSender &sender, const String &targetNumber, SMSReader &reader, 
@@ -53,6 +55,8 @@ private:
     void handleRemovePhoneCommand(const String &rest, const String &senderNumber);
     void handleListPhonesCommand(const String &senderNumber);
     void handleHelpCommand(const String &senderNumber);
+    void handleMuteCommand(const String &rest, const String &senderNumber);
+    void handleUnmuteCommand(const String &rest, const String &senderNumber);
     
     // Check if sender has required permission level
     bool hasPermission(const String &senderNumber, PhoneNumberManager::Permission required);

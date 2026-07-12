@@ -64,10 +64,14 @@ void TemperatureHumidityProcessor::checkThresholds()
         String msg = "ALERT: Temperature high (" + String(_temperature, 1) + "°C)";
         auto numbers = _phoneNumberManager.getAllNumbers();
         for (const auto &entry : numbers) {
-            if (_sender.send(entry.number, msg)) {
-                log_i("[OK] High temperature alert sent to %s", entry.number.c_str());
+            if (!_phoneNumberManager.isMuted(entry.number)) {
+                if (_sender.send(entry.number, msg)) {
+                    log_i("[OK] High temperature alert sent to %s", entry.number.c_str());
+                } else {
+                    log_i("[ERROR] Failed to send high temperature alert to %s", entry.number.c_str());
+                }
             } else {
-                log_i("[ERROR] Failed to send high temperature alert to %s", entry.number.c_str());
+                log_i("[MUTED] High temperature alert not sent to %s (muted)", entry.number.c_str());
             }
         }
         _tempHighAlertSent = true;
@@ -83,10 +87,14 @@ void TemperatureHumidityProcessor::checkThresholds()
         String msg = "ALERT: Temperature low (" + String(_temperature, 1) + "°C)";
         auto numbers = _phoneNumberManager.getAllNumbers();
         for (const auto &entry : numbers) {
-            if (_sender.send(entry.number, msg)) {
-                log_i("[OK] Low temperature alert sent to %s", entry.number.c_str());
+            if (!_phoneNumberManager.isMuted(entry.number)) {
+                if (_sender.send(entry.number, msg)) {
+                    log_i("[OK] Low temperature alert sent to %s", entry.number.c_str());
+                } else {
+                    log_i("[ERROR] Failed to send low temperature alert to %s", entry.number.c_str());
+                }
             } else {
-                log_i("[ERROR] Failed to send low temperature alert to %s", entry.number.c_str());
+                log_i("[MUTED] Low temperature alert not sent to %s (muted)", entry.number.c_str());
             }
         }
         _tempLowAlertSent = true;
@@ -102,10 +110,14 @@ void TemperatureHumidityProcessor::checkThresholds()
         String msg = "ALERT: Humidity high (" + String(_humidity, 1) + "%)";
         auto numbers = _phoneNumberManager.getAllNumbers();
         for (const auto &entry : numbers) {
-            if (_sender.send(entry.number, msg)) {
-                log_i("[OK] High humidity alert sent to %s", entry.number.c_str());
+            if (!_phoneNumberManager.isMuted(entry.number)) {
+                if (_sender.send(entry.number, msg)) {
+                    log_i("[OK] High humidity alert sent to %s", entry.number.c_str());
+                } else {
+                    log_i("[ERROR] Failed to send high humidity alert to %s", entry.number.c_str());
+                }
             } else {
-                log_i("[ERROR] Failed to send high humidity alert to %s", entry.number.c_str());
+                log_i("[MUTED] High humidity alert not sent to %s (muted)", entry.number.c_str());
             }
         }
         _humidityHighAlertSent = true;
@@ -121,10 +133,14 @@ void TemperatureHumidityProcessor::checkThresholds()
         String msg = "ALERT: Humidity low (" + String(_humidity, 1) + "%)";
         auto numbers = _phoneNumberManager.getAllNumbers();
         for (const auto &entry : numbers) {
-            if (_sender.send(entry.number, msg)) {
-                log_i("[OK] Low humidity alert sent to %s", entry.number.c_str());
+            if (!_phoneNumberManager.isMuted(entry.number)) {
+                if (_sender.send(entry.number, msg)) {
+                    log_i("[OK] Low humidity alert sent to %s", entry.number.c_str());
+                } else {
+                    log_i("[ERROR] Failed to send low humidity alert to %s", entry.number.c_str());
+                }
             } else {
-                log_i("[ERROR] Failed to send low humidity alert to %s", entry.number.c_str());
+                log_i("[MUTED] Low humidity alert not sent to %s (muted)", entry.number.c_str());
             }
         }
         _humidityLowAlertSent = true;

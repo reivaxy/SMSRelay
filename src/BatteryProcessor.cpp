@@ -21,10 +21,14 @@ void BatteryProcessor::check()
             String msg = "Battery near empty (BatteryAdcPin=" + String(adcValue) + ")";
             auto numbers = _phoneNumberManager.getAllNumbers();
             for (const auto &entry : numbers) {
-                if (_sender.send(entry.number, msg)) {
-                    log_i("[OK] Battery near empty SMS sent to %s", entry.number.c_str());
+                if (!_phoneNumberManager.isMuted(entry.number)) {
+                    if (_sender.send(entry.number, msg)) {
+                        log_i("[OK] Battery near empty SMS sent to %s", entry.number.c_str());
+                    } else {
+                        log_i("[ERROR] Failed to send battery near empty SMS to %s", entry.number.c_str());
+                    }
                 } else {
-                    log_i("[ERROR] Failed to send battery near empty SMS to %s", entry.number.c_str());
+                    log_i("[MUTED] Battery near empty SMS not sent to %s (muted)", entry.number.c_str());
                 }
             }
             _nearEmptyAlertSent = true;
@@ -34,10 +38,14 @@ void BatteryProcessor::check()
             String msg = "Device is now on battery power (BatteryAdcPin=" + String(adcValue) + ")";
             auto numbers = _phoneNumberManager.getAllNumbers();
             for (const auto &entry : numbers) {
-                if (_sender.send(entry.number, msg)) {
-                    log_i("[OK] Battery alert SMS sent to %s", entry.number.c_str());
+                if (!_phoneNumberManager.isMuted(entry.number)) {
+                    if (_sender.send(entry.number, msg)) {
+                        log_i("[OK] Battery alert SMS sent to %s", entry.number.c_str());
+                    } else {
+                        log_i("[ERROR] Failed to send battery alert SMS to %s", entry.number.c_str());
+                    }
                 } else {
-                    log_i("[ERROR] Failed to send battery alert SMS to %s", entry.number.c_str());
+                    log_i("[MUTED] Battery alert SMS not sent to %s (muted)", entry.number.c_str());
                 }
             }
             _batteryAlertSent = true;
@@ -59,10 +67,14 @@ void BatteryProcessor::check()
             String msg = "Device is now on USB power";
             auto numbers = _phoneNumberManager.getAllNumbers();
             for (const auto &entry : numbers) {
-                if (_sender.send(entry.number, msg)) {
-                    log_i("[OK] USB alert SMS sent to %s", entry.number.c_str());
+                if (!_phoneNumberManager.isMuted(entry.number)) {
+                    if (_sender.send(entry.number, msg)) {
+                        log_i("[OK] USB alert SMS sent to %s", entry.number.c_str());
+                    } else {
+                        log_i("[ERROR] Failed to send USB alert SMS to %s", entry.number.c_str());
+                    }
                 } else {
-                    log_i("[ERROR] Failed to send USB alert SMS to %s", entry.number.c_str());
+                    log_i("[MUTED] USB alert SMS not sent to %s (muted)", entry.number.c_str());
                 }
             }
             _usbAlertSent = true;

@@ -29,6 +29,19 @@ String SMSReader::decodeUCS2Hex(const String &s)
                                                   (uint8_t)(c - 'a' + 10);
             cp = (cp << 4) | n;
         }
+        
+        // Detect and fix little-endian UCS-2: if cp looks wrong but byte-swapped looks correct
+        // Common check: if high byte is 0x00 and low byte is ASCII, it's likely big-endian (correct)
+        // If high byte is non-zero and low byte is 0x00, it might be little-endian
+        if ((cp & 0xFF) == 0x00 && (cp >> 8) != 0x00) {
+            // Likely little-endian: swap bytes
+            uint16_t swapped = ((cp & 0xFF) << 8) | ((cp >> 8) & 0xFF);
+            // Only swap if the swapped version looks more reasonable (ASCII or common Unicode range)
+            if (swapped < 0x0800) {
+                cp = swapped;
+            }
+        }
+        
         if (cp < 0x80) {
             result += (char)cp;
         } else if (cp < 0x800) {
@@ -45,8 +58,9 @@ String SMSReader::decodeUCS2Hex(const String &s)
 
 bool SMSReader::readNext(ReceivedSMS &sms)
 {
-    _modem.sendAT("+CSCS=\"UCS2\"");
-    _modem.waitResponse(500);
+    // Read SMS in default IRA mode (don't switch to UCS2) to avoid modem firmware bug
+    // where underscore (0x5F in GSM) gets incorrectly converted to 0x0011 in UCS-2.
+    // IRA mode preserves underscore as ASCII 0x5F.
 
     for (int i = 1; i <= 30; i++) {
         String buffer = "";
@@ -103,35 +117,31 @@ bool SMSReader::readNext(ReceivedSMS &sms)
 
         if (text.length() == 0) continue;
 
-        _modem.sendAT("+CSCS=\"IRA\"");
-        _modem.waitResponse(500);
-
         sms.index     = i;
         sms.textRaw   = text;
         sms.number    = decodeUCS2Hex(number);
         sms.timestamp = decodeUCS2Hex(timestamp);
-        sms.text      = decodeUCS2Hex(text);
+        sms.text      = text;  // No decoding needed in IRA mode - text is already ASCII
 
         log_i("========================================");
         log_i(">>> NEW SMS RECEIVED <<<");
         log_i("From   : %s", sms.number.c_str());
         log_i("Time   : %s", sms.timestamp.c_str());
+        log_i("Raw hex: %s", sms.textRaw.c_str());
         log_i("Message: %s", sms.text.c_str());
         log_i("========================================");
 
         return true;
     }
 
-    // No unread SMS found — restore IRA charset.
-    _modem.sendAT("+CSCS=\"IRA\"");
-    _modem.waitResponse(500);
+    // No unread SMS found - no charset restoration needed (stayed in IRA)
     return false;
 }
 
 bool SMSReader::readAt(int index, ReceivedSMS &sms)
 {
-    _modem.sendAT("+CSCS=\"UCS2\"");
-    _modem.waitResponse(500);
+    // Read SMS in default IRA mode (don't switch to UCS2) to avoid modem firmware bug.
+    // IRA mode preserves underscore as ASCII 0x5F.
 
     String buffer = "";
     _modem.sendAT(GF("+CMGR="), index);
@@ -145,9 +155,6 @@ bool SMSReader::readAt(int index, ReceivedSMS &sms)
         if (buffer.indexOf("OK") != -1 || buffer.indexOf("ERROR") != -1) break;
         delay(1);
     }
-
-    _modem.sendAT("+CSCS=\"IRA\"");
-    _modem.waitResponse(500);
 
     if (buffer.indexOf("+CMGR:") == -1) {
         return false;
@@ -186,7 +193,7 @@ bool SMSReader::readAt(int index, ReceivedSMS &sms)
     sms.textRaw   = text;
     sms.number    = decodeUCS2Hex(number);
     sms.timestamp = decodeUCS2Hex(timestamp);
-    sms.text      = decodeUCS2Hex(text);
+    sms.text      = text;  // No decoding needed in IRA mode - text is already ASCII
     return true;
 }
 

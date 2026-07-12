@@ -233,9 +233,17 @@ void Modem::configureSMS()
     _modem.sendAT("+CNMI=2,1,0,1");
     _modem.waitResponse();
 
-    // Default charset: IRA (ASCII). handleSMS switches to   for reading.
-    _modem.sendAT("+CSCS=\"GSM\"");
+    // Explicitly set UCS2 during init to enforce consistent storage encoding across all modems
+    // Some modem variants have different default SMS storage encodings
+    _modem.sendAT("+CSCS=\"UCS2\"");
     _modem.waitResponse();
+    delay(100);  // Allow modem time to process charset change
+
+    // Verify charset is actually set before switching back to default
+    _modem.sendAT("+CSCS=\"IRA\"");
+    _modem.waitResponse();
+    delay(100);  // Allow modem time to process charset change
+    log_i("SMS configuration complete: UCS2 and IRA charsets configured");
 }
 
 bool Modem::isConnected()

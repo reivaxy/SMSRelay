@@ -45,6 +45,11 @@ bool SMSSender::send(const String &number, const String &text)
 
 bool SMSSender::sendLongSMS(const String &number, const String &text)
 {
+    // Ensure IRA charset for text mode sending
+    _modem.sendAT("+CSCS=\"IRA\"");
+    _modem.waitResponse(500);
+    delay(50);  // Ensure modem has processed charset change
+
     const int SMS_MAX_LEN = 160;
     if ((int)text.length() <= SMS_MAX_LEN) {
         return _modem.sendSMS(number, text);
@@ -90,6 +95,11 @@ bool SMSSender::sendSingleSMS_UCS2(const String &number, const String &hexChunk)
     String pdu = buildSMSPDU(number, hexChunk, pduLen);
     log_i("[UCS2] PDU mode, pduLen=%d", pduLen);
 
+    // Ensure UCS2 charset is set before switching to PDU mode
+    _modem.sendAT("+CSCS=\"UCS2\"");
+    _modem.waitResponse(500);
+    delay(50);  // Ensure modem has processed charset change
+
     _modem.sendAT(GF("+CMGF=0"));
     if (_modem.waitResponse(1000) != 1) {
         log_e("[UCS2] +CMGF=0 failed");
@@ -110,9 +120,14 @@ bool SMSSender::sendSingleSMS_UCS2(const String &number, const String &hexChunk)
     int res = _modem.waitResponse(60000L);
     log_i("[UCS2] PDU send result: %d", res);
 
-    // Restore text mode for all other operations
+    // Restore text mode and IRA charset for all other operations
     _modem.sendAT(GF("+CMGF=1"));
     _modem.waitResponse(500);
+    delay(50);  // Ensure modem has processed mode change
+    
+    _modem.sendAT("+CSCS=\"IRA\"");
+    _modem.waitResponse(500);
+    delay(50);  // Ensure modem has processed charset change
 
     return res == 1;
 }

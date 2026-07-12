@@ -32,17 +32,19 @@
 #include "TemperatureHumidityProcessor.h"
 #include "ConfigManager.h"
 #include "PhoneNumberManager.h"
+#include "AlertManager.h"
 
 Modem                        modem;
 SMSSender                    sender(modem.getModem(), modem.getSerialStream());
 SMSReader                    reader(modem.getModem(), modem.getSerialStream());
-SMSForwarder                 forwarder(sender, SMS_TARGET);
+SMSForwarder                 forwarder(sender, ROOT_NUMBER);
 ConfigManager                configManager;
-PhoneNumberManager           phoneNumberManager(SMS_TARGET);
-BatteryProcessor             batteryProcessor(sender, SMS_TARGET, configManager, phoneNumberManager);
-MainPowerCheck               mainPowerCheck(sender, SMS_TARGET, configManager, phoneNumberManager);
-TemperatureHumidityProcessor tempHumidityProcessor(sender, SMS_TARGET, BOARD_DHT_PIN, configManager, phoneNumberManager);
-SMSProcessor                 processor(sender, SMS_TARGET, reader, mainPowerCheck, batteryProcessor, tempHumidityProcessor, configManager, phoneNumberManager);
+PhoneNumberManager           phoneNumberManager(ROOT_NUMBER);
+AlertManager                 alertManager(sender, configManager, phoneNumberManager);
+BatteryProcessor             batteryProcessor(sender, ROOT_NUMBER, configManager, phoneNumberManager);
+MainPowerCheck               mainPowerCheck(sender, ROOT_NUMBER, configManager, phoneNumberManager, alertManager);
+TemperatureHumidityProcessor tempHumidityProcessor(sender, ROOT_NUMBER, BOARD_DHT_PIN, configManager, phoneNumberManager, alertManager);
+SMSProcessor                 processor(sender, ROOT_NUMBER, reader, mainPowerCheck, batteryProcessor, tempHumidityProcessor, configManager, phoneNumberManager, alertManager);
 SerialConsole                console(reader, forwarder, batteryProcessor, mainPowerCheck, configManager);
 
 void setup()
@@ -93,7 +95,7 @@ void loop()
     if (millis() - lastCheck > 2000) {
         lastCheck = millis();
         if (modem.isConnected()) {
-            reader.check(SMS_TARGET, processor, forwarder, phoneNumberManager);
+            reader.check(ROOT_NUMBER, processor, forwarder, phoneNumberManager);
         }
     }
 
@@ -105,6 +107,9 @@ void loop()
 
     // Check temperature and humidity levels
     tempHumidityProcessor.check();
+
+    // Check pending alerts and resend if needed
+    alertManager.check();
 
     delay(100);
 }

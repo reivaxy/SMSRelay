@@ -9,15 +9,16 @@ class ConfigManager {
 public:
     // Configuration parameter IDs - add new ones here for extensibility
     enum class Param {
-        TEMP_HIGH,          // Temperature high threshold (float, Celsius)
-        TEMP_LOW,           // Temperature low threshold (float, Celsius)
-        HUMIDITY_HIGH,      // Humidity high threshold (float, percentage)
-        HUMIDITY_LOW,       // Humidity low threshold (float, percentage)
-        BAT_ADC_THRESHOLD,  // Battery power detection threshold (int, ADC value)
-        BAT_ADC_NEAR_EMPTY, // Battery near empty threshold (int, ADC value)
-        POWER_ADC_THRESHOLD,// Main power detection threshold (int, ADC value)
-        TEMP_OFFSET,        // Temperature offset for sensor calibration (float, Celsius, can be negative)
-        HUMIDITY_OFFSET     // Humidity offset for sensor calibration (float, percentage, can be negative)
+        TEMP_HIGH,               // Temperature high threshold (float, Celsius)
+        TEMP_LOW,                // Temperature low threshold (float, Celsius)
+        HUMIDITY_HIGH,           // Humidity high threshold (float, percentage)
+        HUMIDITY_LOW,            // Humidity low threshold (float, percentage)
+        BAT_ADC_THRESHOLD,       // Battery power detection threshold (int, ADC value)
+        BAT_ADC_NEAR_EMPTY,      // Battery near empty threshold (int, ADC value)
+        POWER_ADC_THRESHOLD,     // Main power detection threshold (int, ADC value)
+        TEMP_OFFSET,             // Temperature offset for sensor calibration (float, Celsius, can be negative)
+        HUMIDITY_OFFSET,         // Humidity offset for sensor calibration (float, percentage, can be negative)
+        ALERT_RESEND_DELAY_MINS  // Alert resend delay in minutes (int, default 5)
     };
 
     // Default values
@@ -31,6 +32,7 @@ public:
         static constexpr int POWER_ADC_THRESHOLD = 2000;
         static constexpr float TEMP_OFFSET = 0.0f;
         static constexpr float HUMIDITY_OFFSET = 0.0f;
+        static constexpr int ALERT_RESEND_DELAY_MINS = 5;
     };
 
     ConfigManager();
@@ -63,6 +65,13 @@ public:
 
     // Get all configuration as formatted string
     String getAllParams();
+
+    // Parse user input parameter name and return corresponding Param enum
+    // Returns true if valid, false if unknown parameter
+    static bool parseParamName(const String &userInput, Param &outParam);
+
+    // Get list of valid parameter names for error messages
+    static String getValidParamNames();
 
 private:
     Preferences _prefs;

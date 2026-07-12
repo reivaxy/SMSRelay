@@ -9,6 +9,7 @@
 class TemperatureHumidityProcessor;
 class BatteryProcessor;
 class ConfigManager;
+class AlertManager;
 
 // Handles command SMS received from authorized phone numbers.
 // Supported commands:
@@ -34,7 +35,7 @@ class SMSProcessor {
 public:
     SMSProcessor(SMSSender &sender, const String &targetNumber, SMSReader &reader, 
                  MainPowerCheck &mainPowerCheck, BatteryProcessor &batteryProcessor, TemperatureHumidityProcessor &tempHumidityProcessor,
-                 ConfigManager &configManager, PhoneNumberManager &phoneNumberManager);
+                 ConfigManager &configManager, PhoneNumberManager &phoneNumberManager, AlertManager &alertManager);
 
     // Processes a command SMS. The original SMS is always considered handled
     // (caller should delete it regardless of individual command success).
@@ -54,9 +55,11 @@ private:
     void handleAddPhoneCommand(const String &rest, const String &senderNumber);
     void handleRemovePhoneCommand(const String &rest, const String &senderNumber);
     void handleListPhonesCommand(const String &senderNumber);
+    void handleListAlertsCommand(const String &senderNumber);
     void handleHelpCommand(const String &senderNumber);
     void handleMuteCommand(const String &rest, const String &senderNumber);
     void handleUnmuteCommand(const String &rest, const String &senderNumber);
+    void handleACKCommand(const String &rest, const String &senderNumber);
     
     // Check if sender has required permission level
     bool hasPermission(const String &senderNumber, PhoneNumberManager::Permission required);
@@ -72,4 +75,5 @@ private:
     TemperatureHumidityProcessor     &_tempHumidityProcessor;
     ConfigManager                    &_configManager;
     PhoneNumberManager               &_phoneNumberManager;
+    AlertManager                     &_alertManager;
 };

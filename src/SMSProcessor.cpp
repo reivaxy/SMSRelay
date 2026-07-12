@@ -3,14 +3,15 @@
 #include "ConfigManager.h"
 #include "BatteryProcessor.h"
 #include "MainPowerCheck.h"
+#include "AlertManager.h"
 #include "utilities.h"
 
 SMSProcessor::SMSProcessor(SMSSender &sender, const String &targetNumber, SMSReader &reader, 
                            MainPowerCheck &mainPowerCheck, BatteryProcessor &batteryProcessor, TemperatureHumidityProcessor &tempHumidityProcessor,
-                           ConfigManager &configManager, PhoneNumberManager &phoneNumberManager)
+                           ConfigManager &configManager, PhoneNumberManager &phoneNumberManager, AlertManager &alertManager)
     : _sender(sender), _targetNumber(targetNumber), _reader(reader), _mainPowerCheck(mainPowerCheck),
       _batteryProcessor(batteryProcessor), _tempHumidityProcessor(tempHumidityProcessor), 
-      _configManager(configManager), _phoneNumberManager(phoneNumberManager) {}
+      _configManager(configManager), _phoneNumberManager(phoneNumberManager), _alertManager(alertManager) {}
 
 void SMSProcessor::process(const ReceivedSMS &sms)
 {
@@ -118,11 +119,17 @@ void SMSProcessor::process(const ReceivedSMS &sms)
     else if (textUpper == "LISTPHONES") {
         handleListPhonesCommand(sms.number);
     }
+    else if (textUpper == "LISTALERTS") {
+        handleListAlertsCommand(sms.number);
+    }
     else if (textUpper == "CLEAR") {
         handleClearCommand(sms.number);
     }
     else if (textUpper == "HELP") {
         handleHelpCommand(sms.number);
+    }
+    else if (textUpper.startsWith("ACK ")) {
+        handleACKCommand(sms.text.substring(4), sms.number);
     }
 }
 
@@ -322,7 +329,6 @@ void SMSProcessor::handleWriteConfigCommand(const String &rest, const String &se
     }
     
     String paramName = trimmed.substring(0, spaceIdx);
-    paramName.toUpperCase();
     String valueStr = trimmed.substring(spaceIdx + 1);
     valueStr.trim();
 
@@ -331,90 +337,82 @@ void SMSProcessor::handleWriteConfigCommand(const String &rest, const String &se
         return;
     }
     
+    // Parse parameter name using centralized function
+    ConfigManager::Param param;
+    if (!ConfigManager::parseParamName(paramName, param)) {
+        String errorMsg = "ERROR: Unknown parameter: " + paramName + "\nValid: " + ConfigManager::getValidParamNames();
+        log_e("[CMD] %s", errorMsg.c_str());
+        _sender.send(senderNumber, errorMsg);
+        return;
+    }
+    
     bool success = false;
     String confirmMsg;
     
-    // Temperature thresholds
-    if (paramName == "TEMP_HIGH") {
+    // Determine if parameter is float or int and parse accordingly
+    if (param == ConfigManager::Param::TEMP_HIGH || param == ConfigManager::Param::TEMP_LOW ||
+        param == ConfigManager::Param::HUMIDITY_HIGH || param == ConfigManager::Param::HUMIDITY_LOW ||
+        param == ConfigManager::Param::TEMP_OFFSET || param == ConfigManager::Param::HUMIDITY_OFFSET) {
+        // Float parameters
         float val = valueStr.toFloat();
-        _configManager.setFloat(ConfigManager::Param::TEMP_HIGH, val);
-        confirmMsg = "OK: Temp High set to " + String(val, 1) + "°C";
+        _configManager.setFloat(param, val);
+        
+        if (param == ConfigManager::Param::TEMP_HIGH || param == ConfigManager::Param::TEMP_LOW || param == ConfigManager::Param::TEMP_OFFSET) {
+            confirmMsg = "OK: " + ConfigManager::getParamName(param) + " set to " + String(val, 1) + "°C";
+        } else {
+            confirmMsg = "OK: " + ConfigManager::getParamName(param) + " set to " + String(val, 1) + "%";
+        }
         success = true;
-    } 
-    else if (paramName == "TEMP_LOW") {
-        float val = valueStr.toFloat();
-        _configManager.setFloat(ConfigManager::Param::TEMP_LOW, val);
-        confirmMsg = "OK: Temp Low set to " + String(val, 1) + "°C";
-        success = true;
-    } 
-    // Humidity thresholds
-    else if (paramName == "HUMIDITY_HIGH") {
-        float val = valueStr.toFloat();
-        _configManager.setFloat(ConfigManager::Param::HUMIDITY_HIGH, val);
-        confirmMsg = "OK: Humidity High set to " + String(val, 1) + "%";
-        success = true;
-    } 
-    else if (paramName == "HUMIDITY_LOW") {
-        float val = valueStr.toFloat();
-        _configManager.setFloat(ConfigManager::Param::HUMIDITY_LOW, val);
-        confirmMsg = "OK: Humidity Low set to " + String(val, 1) + "%";
-        success = true;
-    } 
-    // Sensor offsets (calibration)
-    else if (paramName == "TEMP_OFFSET") {
-        float val = valueStr.toFloat();
-        _configManager.setFloat(ConfigManager::Param::TEMP_OFFSET, val);
-        confirmMsg = "OK: Temp Offset set to " + String(val, 1) + "°C";
-        success = true;
-    } 
-    else if (paramName == "HUMIDITY_OFFSET") {
-        float val = valueStr.toFloat();
-        _configManager.setFloat(ConfigManager::Param::HUMIDITY_OFFSET, val);
-        confirmMsg = "OK: Humidity Offset set to " + String(val, 1) + "%";
-        success = true;
-    } 
-    // Battery thresholds
-    else if (paramName == "BAT_ADC_THRESHOLD") {
+    }
+    else if (param == ConfigManager::Param::BAT_ADC_THRESHOLD || param == ConfigManager::Param::BAT_ADC_NEAR_EMPTY ||
+             param == ConfigManager::Param::POWER_ADC_THRESHOLD || param == ConfigManager::Param::ALERT_RESEND_DELAY_MINS) {
+        // Int parameters
         int val = valueStr.toInt();
-        _configManager.setInt(ConfigManager::Param::BAT_ADC_THRESHOLD, val);
-        confirmMsg = "OK: Battery Threshold set to " + String(val);
-        success = true;
-    } 
-    else if (paramName == "BAT_ADC_NEAR_EMPTY") {
-        int val = valueStr.toInt();
-        _configManager.setInt(ConfigManager::Param::BAT_ADC_NEAR_EMPTY, val);
-        confirmMsg = "OK: Battery Near Empty set to " + String(val);
-        success = true;
-    } 
-    // Power thresholds
-    else if (paramName == "POWER_ADC_THRESHOLD") {
-        int val = valueStr.toInt();
-        _configManager.setInt(ConfigManager::Param::POWER_ADC_THRESHOLD, val);
-        confirmMsg = "OK: Power Threshold set to " + String(val);
+        _configManager.setInt(param, val);
+        
+        // Readback verification for debugging
+        int readback = _configManager.getInt(param);
+        String paramUserName = ConfigManager::getParamName(param);
+        log_i("[CMD] Set %s to %d, readback: %d", paramUserName.c_str(), val, readback);
+        
+        if (param == ConfigManager::Param::ALERT_RESEND_DELAY_MINS) {
+            if (readback == val) {
+                confirmMsg = "OK: " + paramUserName + " set to " + String(val) + " minutes";
+            } else {
+                confirmMsg = "WARNING: " + paramUserName + " set to " + String(val) + " but readback shows " + String(readback);
+                log_w("[CMD] Mismatch: wrote %d but read %d", val, readback);
+            }
+        } else {
+            if (readback == val) {
+                confirmMsg = "OK: " + paramUserName + " set to " + String(val);
+            } else {
+                confirmMsg = "WARNING: " + paramUserName + " set to " + String(val) + " but readback shows " + String(readback);
+                log_w("[CMD] Mismatch: wrote %d but read %d", val, readback);
+            }
+        }
         success = true;
     }
     
     if (success) {
         log_i("[CMD] %s", confirmMsg.c_str());
         _sender.send(senderNumber, confirmMsg);
-    } else {
-        String errorMsg = "ERROR: Unknown parameter: " + paramName + "\nValid: TEMP_HIGH, TEMP_LOW, TEMP_OFFSET, HUMIDITY_HIGH, HUMIDITY_LOW, HUMIDITY_OFFSET, BAT_ADC_THRESHOLD, BAT_ADC_NEAR_EMPTY, POWER_ADC_THRESHOLD";
-        log_e("[CMD] %s", errorMsg.c_str());
-        _sender.send(senderNumber, errorMsg);
     }
 }
 
 void SMSProcessor::handleClearCommand(const String &senderNumber)
 {
-    log_i("[CMD] Clear alert flags received");
+    log_i("[CMD] Clear command received from %s", senderNumber.c_str());
+    
+    // Clear all pending alerts from AlertManager
+    _alertManager.clearAll();
     
     // Reset alert flags in all processors
     _tempHumidityProcessor.resetAlertFlags();
     _batteryProcessor.resetAlertFlags();
     _mainPowerCheck.resetAlertFlags();
     
-    log_i("[OK] All alert SMS sent flags cleared");
-    _sender.send(senderNumber, "OK: All alert SMS flags cleared");
+    log_i("[OK] All alerts and alert flags cleared");
+    _sender.send(senderNumber, "OK: All alerts cleared (ACKed and pending)");
 }
 
 bool SMSProcessor::hasPermission(const String &senderNumber, PhoneNumberManager::Permission required) {
@@ -506,6 +504,12 @@ void SMSProcessor::handleListPhonesCommand(const String &senderNumber) {
     _sender.send(senderNumber, response);
 }
 
+void SMSProcessor::handleListAlertsCommand(const String &senderNumber) {
+    log_i("[CMD] List alerts requested");
+    String response = _alertManager.getPendingAlertsList();
+    _sender.send(senderNumber, response);
+}
+
 void SMSProcessor::handleHelpCommand(const String &senderNumber) {
     log_i("[CMD] Help command received");
     
@@ -517,7 +521,9 @@ void SMSProcessor::handleHelpCommand(const String &senderNumber) {
     helpMsg += "LEVELS - Sensor levels\n";
     helpMsg += "CONFIG - View params\n";
     helpMsg += "LISTPHONES - List phones\n";
+    helpMsg += "LISTALERTS - List pending alerts\n";
     helpMsg += "CLEAR - Reset alerts\n";
+    helpMsg += "ACK <code> - Acknowledge alert\n";
     
     // Admin-only commands
     if (perm == PhoneNumberManager::Permission::ADMIN) {
@@ -529,19 +535,14 @@ void SMSProcessor::handleHelpCommand(const String &senderNumber) {
         helpMsg += "CONFIG <p> <v> - Set param\n";
         helpMsg += "ADDPHONE <n><p>[a] - Add\n";
         helpMsg += "REMOVEPHONE <i|n> - Remove\n";
-        helpMsg += "MUTE <i|n> - Mute alerts\n";
-        helpMsg += "UNMUTE <i|n> - Unmute alerts\n";
+        helpMsg += "MUTE <i|n|me> - Mute alerts\n";
+        helpMsg += "UNMUTE <i|n|me> - Unmute alerts\n";
         helpMsg += "\nLegend:\n";
         helpMsg += "<i|n>=index/number\n";
         helpMsg += "<p>=admin|read\n";
         helpMsg += "[a]=opt alias";
         
-        helpMsg += "\n\nParams: TEMP_HIGH, TEMP_LOW,\n";
-        helpMsg += "TEMP_OFFSET, HUMIDITY_HIGH,\n";
-        helpMsg += "HUMIDITY_LOW, HUMIDITY_OFFSET,\n";
-        helpMsg += "BAT_ADC_THRESHOLD,\n";
-        helpMsg += "BAT_ADC_NEAR_EMPTY,\n";
-        helpMsg += "POWER_ADC_THRESHOLD";
+        helpMsg += "\n\nParams: " + ConfigManager::getValidParamNames();
     }
     
     log_i("[CMD] Help displayed");
@@ -551,15 +552,23 @@ void SMSProcessor::handleHelpCommand(const String &senderNumber) {
 void SMSProcessor::handleMuteCommand(const String &rest, const String &senderNumber) {
     String param = rest;
     param.trim();
+    param.toUpperCase();
     
     if (param.length() == 0) {
-        _sender.send(senderNumber, "ERROR: MUTE syntax: MUTE <index|number>");
+        _sender.send(senderNumber, "ERROR: MUTE syntax: MUTE <index|number|me>");
         return;
+    }
+    
+    // Replace "me" with the sender's number
+    if (param == "ME") {
+        param = senderNumber;
+        log_i("[CMD] MUTE command using 'me', resolved to: %s", param.c_str());
     }
     
     if (_phoneNumberManager.muteNumber(param)) {
         log_i("[CMD] Phone muted: %s", param.c_str());
-        _sender.send(senderNumber, "OK: Phone " + param + " muted (won't receive alerts)");
+        String confirmMsg = (param == senderNumber) ? "OK: Your number muted (you won't receive alerts)" : "OK: Phone " + param + " muted (won't receive alerts)";
+        _sender.send(senderNumber, confirmMsg);
     } else {
         _sender.send(senderNumber, "ERROR: Phone not found or invalid index. Run LISTPHONES to see available entries");
     }
@@ -568,17 +577,59 @@ void SMSProcessor::handleMuteCommand(const String &rest, const String &senderNum
 void SMSProcessor::handleUnmuteCommand(const String &rest, const String &senderNumber) {
     String param = rest;
     param.trim();
+    param.toUpperCase();
     
     if (param.length() == 0) {
-        _sender.send(senderNumber, "ERROR: UNMUTE syntax: UNMUTE <index|number>");
+        _sender.send(senderNumber, "ERROR: UNMUTE syntax: UNMUTE <index|number|me>");
         return;
+    }
+    
+    // Replace "me" with the sender's number
+    if (param == "ME") {
+        param = senderNumber;
+        log_i("[CMD] UNMUTE command using 'me', resolved to: %s", param.c_str());
     }
     
     if (_phoneNumberManager.unmuteNumber(param)) {
         log_i("[CMD] Phone unmuted: %s", param.c_str());
-        _sender.send(senderNumber, "OK: Phone " + param + " unmuted (will receive alerts)");
+        String confirmMsg = (param == senderNumber) ? "OK: Your number unmuted (you will receive alerts)" : "OK: Phone " + param + " unmuted (will receive alerts)";
+        _sender.send(senderNumber, confirmMsg);
     } else {
         _sender.send(senderNumber, "ERROR: Phone not found or invalid index. Run LISTPHONES to see available entries");
+    }
+}
+
+void SMSProcessor::handleACKCommand(const String &rest, const String &senderNumber) {
+    String code = rest;
+    code.trim();
+    code.toUpperCase();
+    
+    log_i("[CMD] ACK command received from %s with code: '%s' (length: %d)", senderNumber.c_str(), code.c_str(), code.length());
+    
+    // Validate code is exactly 3 digits
+    if (code.length() != 3) {
+        log_w("[CMD] ACK validation failed: code length is %d, expected 3", code.length());
+        _sender.send(senderNumber, "ERROR: ACK code must be 3 digits (e.g., ACK 123)");
+        return;
+    }
+    
+    // Check each digit
+    if (code[0] < '0' || code[0] > '9' || 
+        code[1] < '0' || code[1] > '9' || 
+        code[2] < '0' || code[2] > '9') {
+        log_w("[CMD] ACK validation failed: code '%s' contains non-digit characters", code.c_str());
+        _sender.send(senderNumber, "ERROR: ACK code must be 3 digits (e.g., ACK 123)");
+        return;
+    }
+    
+    log_i("[CMD] ACK code validated. Processing acknowledgment for code %s from %s", code.c_str(), senderNumber.c_str());
+    
+    if (_alertManager.handleACK(senderNumber, code)) {
+        log_i("[OK] Alert [%s] acknowledged by %s", code.c_str(), senderNumber.c_str());
+        _sender.send(senderNumber, "OK: Alert [" + code + "] acknowledged");
+    } else {
+        log_w("[CMD] ACK failed: unknown alert code [%s] from %s", code.c_str(), senderNumber.c_str());
+        _sender.send(senderNumber, "ERROR: Unknown alert code [" + code + "]");
     }
 }
 

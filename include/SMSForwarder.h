@@ -3,7 +3,7 @@
 #include "SMSReader.h"
 #include "SMSSender.h"
 
-// Handles incoming SMS from numbers other than SMS_TARGET.
+// Handles incoming SMS from numbers other than ROOT_NUMBER.
 // Forwards the header and body to the target number.
 class SMSForwarder {
 public:

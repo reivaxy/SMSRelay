@@ -121,7 +121,7 @@ String PhoneNumberManager::getFormattedList() {
         String muteStr = isMuted(numbers[i].number) ? " [MUTED]" : "";
         String alias = getAlias(numbers[i].number);
         String aliasStr = (alias.length() > 0) ? " (" + alias + ")" : "";
-        result += "[" + String(i) + "] " + numbers[i].number + aliasStr + " (" + permStr + ")" + muteStr + "\n";
+        result += "[" + String(i) + "] " + numbers[i].number + " (" + permStr + ")" + aliasStr + muteStr + "\n";
     }
 
     return result;
@@ -154,9 +154,8 @@ String PhoneNumberManager::getAliasKey(int index) {
 String PhoneNumberManager::getAlias(const String &number) {
     String normalized = normalizeNumber(number);
 
-    // Root number has no alias
     if (normalized == _rootNumber) {
-        return "";
+        return ROOT_ALIAS;
     }
 
     int slot = findPhoneSlot(normalized);

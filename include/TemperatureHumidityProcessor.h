@@ -3,9 +3,10 @@
 #include "SMSSender.h"
 #include "DHT.h"
 
-// Forward declaration
+// Forward declarations
 class ConfigManager;
 class PhoneNumberManager;
+class AlertManager;
 
 // Monitors DHT22 temperature and humidity sensor and sends alert SMS messages.
 // Periodically checks sensor readings and sends alerts when thresholds are exceeded.
@@ -13,7 +14,7 @@ class PhoneNumberManager;
 // Sends alerts to all authorized phone numbers.
 class TemperatureHumidityProcessor {
 public:
-    TemperatureHumidityProcessor(SMSSender &sender, const String &targetNumber, uint8_t pin, ConfigManager &configManager, PhoneNumberManager &phoneNumberManager);
+    TemperatureHumidityProcessor(SMSSender &sender, const String &targetNumber, uint8_t pin, ConfigManager &configManager, PhoneNumberManager &phoneNumberManager, AlertManager &alertManager);
 
     // Initialize the sensor
     void init();
@@ -42,6 +43,7 @@ private:
     uint8_t    _pin;
     ConfigManager &_configManager;
     PhoneNumberManager &_phoneNumberManager;
+    AlertManager &_alertManager;
 
     // Current readings
     float       _temperature = 0.0f;
@@ -59,4 +61,8 @@ private:
     bool _tempLowAlertSent    = false;
     bool _humidityHighAlertSent = false;
     bool _humidityLowAlertSent  = false;
+    String _tempHighAlertCode = "";
+    String _tempLowAlertCode = "";
+    String _humidityHighAlertCode = "";
+    String _humidityLowAlertCode = "";
 };

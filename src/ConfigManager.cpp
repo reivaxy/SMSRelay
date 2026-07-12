@@ -22,16 +22,28 @@ void ConfigManager::init() {
         resetAllToDefaults();
         _prefs.putBool("initialized", true);
     } else {
-        // Ensure new parameters exist (for upgrades from previous versions)
+        // Ensure all parameters exist (for upgrades from previous versions)
         log_i("[CONFIG] Checking for missing parameters");
-        if (!_prefs.isKey("TEMP_OFFSET")) {
-            log_i("[CONFIG] Initializing TEMP_OFFSET");
-            _prefs.putFloat("TEMP_OFFSET", Defaults::TEMP_OFFSET);
+        if (!_prefs.isKey("TEMP_HIGH")) _prefs.putFloat("TEMP_HIGH", Defaults::TEMP_HIGH);
+        if (!_prefs.isKey("TEMP_LOW")) _prefs.putFloat("TEMP_LOW", Defaults::TEMP_LOW);
+        if (!_prefs.isKey("HUMIDITY_HIGH")) _prefs.putFloat("HUMIDITY_HIGH", Defaults::HUMIDITY_HIGH);
+        if (!_prefs.isKey("HUMIDITY_LOW")) _prefs.putFloat("HUMIDITY_LOW", Defaults::HUMIDITY_LOW);
+        if (!_prefs.isKey("BAT_THRESHOLD")) _prefs.putInt("BAT_THRESHOLD", Defaults::BAT_ADC_THRESHOLD);
+        if (!_prefs.isKey("BAT_NEAR_EMPTY")) _prefs.putInt("BAT_NEAR_EMPTY", Defaults::BAT_ADC_NEAR_EMPTY);
+        if (!_prefs.isKey("POWER_THRESHOLD")) _prefs.putInt("POWER_THRESHOLD", Defaults::POWER_ADC_THRESHOLD);
+        if (!_prefs.isKey("TEMP_OFFSET")) _prefs.putFloat("TEMP_OFFSET", Defaults::TEMP_OFFSET);
+        if (!_prefs.isKey("HUMIDITY_OFFSET")) _prefs.putFloat("HUMIDITY_OFFSET", Defaults::HUMIDITY_OFFSET);
+        if (!_prefs.isKey("RESEND_MINS")) _prefs.putInt("RESEND_MINS", Defaults::ALERT_RESEND_DELAY_MINS);
+        
+        // Clean up any old/stray keys that might interfere
+        const char* oldKeys[] = {"ALERT_RESEND_DELAY_MINS", "ALERT_RESEND_MIN", "BAT_ADC_THRESHOLD", "BAT_ADC_NEAR_EMPTY", "POWER_ADC_THRESHOLD"};
+        for (const auto& oldKey : oldKeys) {
+            if (_prefs.isKey(oldKey)) {
+                log_i("[CONFIG] Removing stray old key: %s", oldKey);
+                _prefs.remove(oldKey);
+            }
         }
-        if (!_prefs.isKey("HUMIDITY_OFFSET")) {
-            log_i("[CONFIG] Initializing HUMIDITY_OFFSET");
-            _prefs.putFloat("HUMIDITY_OFFSET", Defaults::HUMIDITY_OFFSET);
-        }
+        log_i("[CONFIG] Parameter check complete");
     }
     log_i("[CONFIG] ConfigManager ready");
 }
@@ -75,40 +87,66 @@ void ConfigManager::resetAllToDefaults() {
     _prefs.putFloat("TEMP_LOW", Defaults::TEMP_LOW);
     _prefs.putFloat("HUMIDITY_HIGH", Defaults::HUMIDITY_HIGH);
     _prefs.putFloat("HUMIDITY_LOW", Defaults::HUMIDITY_LOW);
-    _prefs.putInt("BAT_ADC_THRESHOLD", Defaults::BAT_ADC_THRESHOLD);
-    _prefs.putInt("BAT_ADC_NEAR_EMPTY", Defaults::BAT_ADC_NEAR_EMPTY);
-    _prefs.putInt("POWER_ADC_THRESHOLD", Defaults::POWER_ADC_THRESHOLD);
+    _prefs.putInt("BAT_THRESHOLD", Defaults::BAT_ADC_THRESHOLD);
+    _prefs.putInt("BAT_NEAR_EMPTY", Defaults::BAT_ADC_NEAR_EMPTY);
+    _prefs.putInt("POWER_THRESHOLD", Defaults::POWER_ADC_THRESHOLD);
     _prefs.putFloat("TEMP_OFFSET", Defaults::TEMP_OFFSET);
     _prefs.putFloat("HUMIDITY_OFFSET", Defaults::HUMIDITY_OFFSET);
+    _prefs.putInt("RESEND_MINS", Defaults::ALERT_RESEND_DELAY_MINS);
     log_i("[CONFIG] All parameters reset to defaults");
 }
 
 String ConfigManager::getParamKey(Param param) {
     switch (param) {
-        case Param::TEMP_HIGH:          return "TEMP_HIGH";
-        case Param::TEMP_LOW:           return "TEMP_LOW";
-        case Param::HUMIDITY_HIGH:      return "HUMIDITY_HIGH";
-        case Param::HUMIDITY_LOW:       return "HUMIDITY_LOW";
-        case Param::BAT_ADC_THRESHOLD:  return "BAT_ADC_THRESHOLD";
-        case Param::BAT_ADC_NEAR_EMPTY: return "BAT_ADC_NEAR_EMPTY";
-        case Param::POWER_ADC_THRESHOLD: return "POWER_ADC_THRESHOLD";
-        case Param::TEMP_OFFSET:        return "TEMP_OFFSET";
-        case Param::HUMIDITY_OFFSET:    return "HUMIDITY_OFFSET";
+        case Param::TEMP_HIGH:               return "TEMP_HIGH";
+        case Param::TEMP_LOW:                return "TEMP_LOW";
+        case Param::HUMIDITY_HIGH:           return "HUMIDITY_HIGH";
+        case Param::HUMIDITY_LOW:            return "HUMIDITY_LOW";
+        case Param::BAT_ADC_THRESHOLD:       return "BAT_THRESHOLD";
+        case Param::BAT_ADC_NEAR_EMPTY:      return "BAT_NEAR_EMPTY";
+        case Param::POWER_ADC_THRESHOLD:     return "POWER_THRESHOLD";
+        case Param::TEMP_OFFSET:             return "TEMP_OFFSET";
+        case Param::HUMIDITY_OFFSET:         return "HUMIDITY_OFFSET";
+        case Param::ALERT_RESEND_DELAY_MINS: return "RESEND_MINS";
     }
     return "UNKNOWN";
 }
 
+bool ConfigManager::parseParamName(const String &userInput, Param &outParam) {
+    String input = userInput;
+    input.toUpperCase();
+    
+    // Map user input to Param enum
+    if (input == "TEMP_HIGH") { outParam = Param::TEMP_HIGH; return true; }
+    else if (input == "TEMP_LOW") { outParam = Param::TEMP_LOW; return true; }
+    else if (input == "HUMIDITY_HIGH") { outParam = Param::HUMIDITY_HIGH; return true; }
+    else if (input == "HUMIDITY_LOW") { outParam = Param::HUMIDITY_LOW; return true; }
+    else if (input == "BAT_THRESHOLD") { outParam = Param::BAT_ADC_THRESHOLD; return true; }
+    else if (input == "BAT_NEAR_EMPTY") { outParam = Param::BAT_ADC_NEAR_EMPTY; return true; }
+    else if (input == "POWER_THRESHOLD") { outParam = Param::POWER_ADC_THRESHOLD; return true; }
+    else if (input == "TEMP_OFFSET") { outParam = Param::TEMP_OFFSET; return true; }
+    else if (input == "HUMIDITY_OFFSET") { outParam = Param::HUMIDITY_OFFSET; return true; }
+    else if (input == "RESEND_MINS") { outParam = Param::ALERT_RESEND_DELAY_MINS; return true; }
+    
+    return false;
+}
+
+String ConfigManager::getValidParamNames() {
+    return "TEMP_HIGH, TEMP_LOW, TEMP_OFFSET, HUMIDITY_HIGH, HUMIDITY_LOW, HUMIDITY_OFFSET, BAT_THRESHOLD, BAT_NEAR_EMPTY, POWER_THRESHOLD, RESEND_MINS";
+}
+
 String ConfigManager::getParamName(Param param) {
     switch (param) {
-        case Param::TEMP_HIGH:          return "Temp High";
-        case Param::TEMP_LOW:           return "Temp Low";
-        case Param::HUMIDITY_HIGH:      return "Humidity High";
-        case Param::HUMIDITY_LOW:       return "Humidity Low";
-        case Param::BAT_ADC_THRESHOLD:  return "Battery Threshold";
-        case Param::BAT_ADC_NEAR_EMPTY: return "Battery Near Empty";
-        case Param::POWER_ADC_THRESHOLD: return "Power Threshold";
-        case Param::TEMP_OFFSET:        return "Temp Offset";
-        case Param::HUMIDITY_OFFSET:    return "Humidity Offset";
+        case Param::TEMP_HIGH:               return "Temp High";
+        case Param::TEMP_LOW:                return "Temp Low";
+        case Param::HUMIDITY_HIGH:           return "Humidity High";
+        case Param::HUMIDITY_LOW:            return "Humidity Low";
+        case Param::BAT_ADC_THRESHOLD:       return "Battery Threshold";
+        case Param::BAT_ADC_NEAR_EMPTY:      return "Battery Near Empty";
+        case Param::POWER_ADC_THRESHOLD:     return "Power Threshold";
+        case Param::TEMP_OFFSET:             return "Temp Offset";
+        case Param::HUMIDITY_OFFSET:         return "Humidity Offset";
+        case Param::ALERT_RESEND_DELAY_MINS: return "Alert Resend Delay (min)";
     }
     return "Unknown";
 }
@@ -127,10 +165,11 @@ float ConfigManager::getDefaultFloatValue(Param param) {
 
 int ConfigManager::getDefaultIntValue(Param param) {
     switch (param) {
-        case Param::BAT_ADC_THRESHOLD:   return Defaults::BAT_ADC_THRESHOLD;
-        case Param::BAT_ADC_NEAR_EMPTY:  return Defaults::BAT_ADC_NEAR_EMPTY;
-        case Param::POWER_ADC_THRESHOLD: return Defaults::POWER_ADC_THRESHOLD;
-        default:                         return 0;
+        case Param::BAT_ADC_THRESHOLD:       return Defaults::BAT_ADC_THRESHOLD;
+        case Param::BAT_ADC_NEAR_EMPTY:      return Defaults::BAT_ADC_NEAR_EMPTY;
+        case Param::POWER_ADC_THRESHOLD:     return Defaults::POWER_ADC_THRESHOLD;
+        case Param::ALERT_RESEND_DELAY_MINS: return Defaults::ALERT_RESEND_DELAY_MINS;
+        default:                             return 0;
     }
 }
 
@@ -148,6 +187,9 @@ String ConfigManager::getParamInfo(Param param) {
     
     // Int parameters
     int val = getInt(param);
+    if (param == Param::ALERT_RESEND_DELAY_MINS) {
+        return name + ": " + String(val) + " min";
+    }
     return name + ": " + String(val);
 }
 
@@ -161,6 +203,7 @@ String ConfigManager::getAllParams() {
     msg += getParamInfo(Param::HUMIDITY_OFFSET) + "\n";
     msg += getParamInfo(Param::BAT_ADC_THRESHOLD) + "\n";
     msg += getParamInfo(Param::BAT_ADC_NEAR_EMPTY) + "\n";
-    msg += getParamInfo(Param::POWER_ADC_THRESHOLD);
+    msg += getParamInfo(Param::POWER_ADC_THRESHOLD) + "\n";
+    msg += getParamInfo(Param::ALERT_RESEND_DELAY_MINS);
     return msg;
 }

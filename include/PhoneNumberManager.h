@@ -2,9 +2,10 @@
 #include <Arduino.h>
 #include <Preferences.h>
 #include <vector>
+#include "secret.h"
 
 // Manages authorized phone numbers with different permission levels.
-// The root phone number (from SMS_TARGET) is always admin.
+// The root phone number (from ROOT_NUMBER) is always admin.
 // Up to 5 additional phone numbers can be added with either admin or read-only permissions.
 // Permissions:
 //   - ADMIN: Can execute all commands (status, read, write, config, add/remove phones)

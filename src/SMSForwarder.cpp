@@ -11,6 +11,7 @@ bool SMSForwarder::forward(const ReceivedSMS &sms)
     bool sendHeader = !(sameNumber && withinWindow);
 
     if (sendHeader) {
+        log_i("[INFO] Forwarding SMS from %s to %s", sms.number.c_str(), _targetNumber.c_str());    
         String headerMessage = "Fwd from: " + sms.number + "\nTime: " + sms.timestamp;
         bool sent1 = _sender.send(_targetNumber, headerMessage);
         log_i("%s", sent1 ? "[OK] Header SMS forwarded" : "[ERROR] Failed to forward header SMS");
@@ -24,7 +25,7 @@ bool SMSForwarder::forward(const ReceivedSMS &sms)
         _lastSenderNumber = sms.number;
         _lastForwardTime  = now;
     } else {
-        log_i("[ERROR] Failed to forward body SMS");
+        log_e("[ERROR] Failed to forward body SMS");
         _sender.send(_targetNumber, "ERROR: Failed to forward SMS #" + String(sms.index) + " from " + sms.number);
     }
     return sent2;

@@ -306,8 +306,6 @@ void Modem::checkConnection()
         return;
     }
     log_i("Modem connection check");
-    
-    _lastConnectionCheck = millis();
 
     if (!isConnected()) {
         log_w("Modem connection lost at %lu ms, attempting reconnection...", millis());
@@ -319,4 +317,6 @@ void Modem::checkConnection()
     } else {
         log_i("Modem connection check: OK");
     }
+    
+    _lastConnectionCheck = millis();
 }

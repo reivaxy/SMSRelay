@@ -81,11 +81,13 @@ void loop()
     // Check modem connection periodically and reconnect if needed
     modem.checkConnection();
 
-    // Check for incoming SMS periodically
+    // Check for incoming SMS periodically (but only if modem is connected)
     static unsigned long lastCheck = 0;
     if (millis() - lastCheck > 2000) {
         lastCheck = millis();
-        reader.check(SMS_TARGET, processor, forwarder);
+        if (modem.isConnected()) {
+            reader.check(SMS_TARGET, processor, forwarder);
+        }
     }
 
     // Check battery level

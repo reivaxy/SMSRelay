@@ -79,6 +79,12 @@ bool SMSReader::readNext(ReceivedSMS &sms)
             delay(1);
         }
 
+        // If modem not responding to AT commands, stop scanning and return early
+        if (buffer.indexOf("ERROR") != -1 || (buffer.length() == 0 && millis() - startTime >= 3000)) {
+            log_w("[WARN] Modem not responding, stopping SMS scan");
+            return false;
+        }
+
         if (buffer.indexOf("+CMGR:") == -1) {
             continue;
         }
@@ -121,7 +127,7 @@ bool SMSReader::readNext(ReceivedSMS &sms)
         sms.textRaw   = text;
         sms.number    = decodeUCS2Hex(number);
         sms.timestamp = decodeUCS2Hex(timestamp);
-        sms.text      = text;  // No decoding needed in IRA mode - text is already ASCII
+        sms.text      = isHexUCS2(text) ? decodeUCS2Hex(text) : text;  // Decode if UCS-2 hex (diacritics), else use as-is (plain ASCII)
 
         log_i("========================================");
         log_i(">>> NEW SMS RECEIVED <<<");
@@ -193,7 +199,7 @@ bool SMSReader::readAt(int index, ReceivedSMS &sms)
     sms.textRaw   = text;
     sms.number    = decodeUCS2Hex(number);
     sms.timestamp = decodeUCS2Hex(timestamp);
-    sms.text      = text;  // No decoding needed in IRA mode - text is already ASCII
+    sms.text      = isHexUCS2(text) ? decodeUCS2Hex(text) : text;  // Decode if UCS-2 hex (diacritics), else use as-is (plain ASCII)
     return true;
 }
 

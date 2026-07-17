@@ -47,12 +47,15 @@ bool ClockManager::syncWithNetwork() {
         time_t epochTime = mktime(&timeinfo);
         
         if (epochTime > 0) {
-            _epochTime = (unsigned long)epochTime;
+            // Adjust for timezone offset returned by modem
+            // tzquarter is in quarter-hours (15 minutes each), so multiply by 900 to get seconds
+            long tzOffsetSeconds = (long)(tzquarter * 900);
+            _epochTime = (unsigned long)(epochTime - tzOffsetSeconds);
             _millisecondsAtSync = millis();
             _lastSyncTime = millis();
             
-            log_i("[CLOCK] Network time synced: %04d-%02d-%02d %02d:%02d:%02d (epoch: %lu)",
-                  year, month, day, hour, min, sec, _epochTime);
+            log_i("[CLOCK] Network time synced: %04d-%02d-%02d %02d:%02d:%02d TZ:%+.2f (epoch: %lu)",
+                  year, month, day, hour, min, sec, tzquarter, _epochTime);
             return true;
         }
     }

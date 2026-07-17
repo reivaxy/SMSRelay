@@ -11,6 +11,7 @@ class BatteryProcessor;
 class ConfigManager;
 class AlertManager;
 class ClockManager;
+class OTAManager;
 
 // Handles command SMS received from authorized phone numbers.
 // Supported commands:
@@ -32,11 +33,13 @@ class ClockManager;
 //   "REMOVEPHONE <number>" - remove authorized phone number
 //   "MUTE <number>" - mute phone number from receiving alerts
 //   "UNMUTE <number>" - unmute phone number to receive alerts
+//   "OTA" - start OTA firmware update (requires clear alerts)
 class SMSProcessor {
 public:
     SMSProcessor(SMSSender &sender, const String &targetNumber, SMSReader &reader, 
                  MainPowerCheck &mainPowerCheck, BatteryProcessor &batteryProcessor, TemperatureHumidityProcessor &tempHumidityProcessor,
-                 ConfigManager &configManager, PhoneNumberManager &phoneNumberManager, AlertManager &alertManager, ClockManager &clockManager);
+                 ConfigManager &configManager, PhoneNumberManager &phoneNumberManager, AlertManager &alertManager, ClockManager &clockManager,
+                 OTAManager &otaManager);
 
     // Processes a command SMS. The original SMS is always considered handled
     // (caller should delete it regardless of individual command success).
@@ -61,6 +64,7 @@ private:
     void handleMuteCommand(const String &rest, const String &senderNumber);
     void handleUnmuteCommand(const String &rest, const String &senderNumber);
     void handleACKCommand(const String &rest, const String &senderNumber);
+    void handleOTACommand(const String &senderNumber);
     
     // Check if sender has required permission level
     bool hasPermission(const String &senderNumber, PhoneNumberManager::Permission required);
@@ -78,4 +82,5 @@ private:
     PhoneNumberManager               &_phoneNumberManager;
     AlertManager                     &_alertManager;
     ClockManager                     &_clockManager;
+    OTAManager                       &_otaManager;
 };

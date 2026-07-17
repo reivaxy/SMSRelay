@@ -18,7 +18,9 @@ public:
         POWER_ADC_THRESHOLD,     // Main power detection threshold (int, ADC value)
         TEMP_OFFSET,             // Temperature offset for sensor calibration (float, Celsius, can be negative)
         HUMIDITY_OFFSET,         // Humidity offset for sensor calibration (float, percentage, can be negative)
-        ALERT_RESEND_DELAY_MINS  // Alert resend delay in minutes (int, default 5)
+        ALERT_RESEND_DELAY_MINS, // Alert resend delay in minutes (int, default 5)
+        WIFI_SSID,               // WiFi network SSID (string)
+        WIFI_PASSWORD            // WiFi network password (string)
     };
 
     // Default values
@@ -72,6 +74,16 @@ public:
 
     // Get list of valid parameter names for error messages
     static String getValidParamNames();
+
+    // WiFi configuration (separate from parameter system)
+    void setWiFiSSID(const String &ssid);
+    String getWiFiSSID();
+    void setWiFiPassword(const String &password);
+    String getWiFiPassword();
+
+    // String parameter access (for WiFi credentials and future string params)
+    String getStringParam(Param param);
+    void setStringParam(Param param, const String &value);
 
 private:
     Preferences _prefs;

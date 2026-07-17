@@ -5,14 +5,17 @@
 #include "MainPowerCheck.h"
 #include "AlertManager.h"
 #include "ClockManager.h"
+#include "OTAManager.h"
 #include "utilities.h"
 
 SMSProcessor::SMSProcessor(SMSSender &sender, const String &targetNumber, SMSReader &reader, 
                            MainPowerCheck &mainPowerCheck, BatteryProcessor &batteryProcessor, TemperatureHumidityProcessor &tempHumidityProcessor,
-                           ConfigManager &configManager, PhoneNumberManager &phoneNumberManager, AlertManager &alertManager, ClockManager &clockManager)
+                           ConfigManager &configManager, PhoneNumberManager &phoneNumberManager, AlertManager &alertManager, ClockManager &clockManager,
+                           OTAManager &otaManager)
     : _sender(sender), _targetNumber(targetNumber), _reader(reader), _mainPowerCheck(mainPowerCheck),
       _batteryProcessor(batteryProcessor), _tempHumidityProcessor(tempHumidityProcessor), 
-      _configManager(configManager), _phoneNumberManager(phoneNumberManager), _alertManager(alertManager), _clockManager(clockManager) {}
+      _configManager(configManager), _phoneNumberManager(phoneNumberManager), _alertManager(alertManager), _clockManager(clockManager),
+      _otaManager(otaManager) {}
 
 void SMSProcessor::process(const ReceivedSMS &sms)
 {
@@ -128,6 +131,13 @@ void SMSProcessor::process(const ReceivedSMS &sms)
     }
     else if (textUpper == "HELP") {
         handleHelpCommand(sms.number);
+    }
+    else if (textUpper == "OTA") {
+        if (!hasPermission(sms.number, PhoneNumberManager::Permission::ADMIN)) {
+            sendPermissionDenied(sms.number);
+            return;
+        }
+        handleOTACommand(sms.number);
     }
     else if (textUpper.startsWith("ACK ")) {
         handleACKCommand(sms.text.substring(4), sms.number);
@@ -310,8 +320,12 @@ void SMSProcessor::handleLevelCommand(const String &senderNumber)
 void SMSProcessor::handleReadConfigCommand(const String &senderNumber)
 {
     log_i("[CMD] Config query received");
-    String configMsg = "Time: " + _clockManager.getFormattedDateTime() + "\n";
+    String configMsg = "";
+#ifdef GIT_REV
+    configMsg += "Rev: " + String(GIT_REV) + "\n";
+#endif
     configMsg += _configManager.getAllParams();
+    configMsg += "Time: " + _clockManager.getFormattedDateTime() + "\n";
     log_i("[CMD] %s", configMsg.c_str());
     _sender.send(senderNumber, configMsg);
 }
@@ -351,7 +365,7 @@ void SMSProcessor::handleWriteConfigCommand(const String &rest, const String &se
     bool success = false;
     String confirmMsg;
     
-    // Determine if parameter is float or int and parse accordingly
+    // Determine if parameter is float, int, or string and parse accordingly
     if (param == ConfigManager::Param::TEMP_HIGH || param == ConfigManager::Param::TEMP_LOW ||
         param == ConfigManager::Param::HUMIDITY_HIGH || param == ConfigManager::Param::HUMIDITY_LOW ||
         param == ConfigManager::Param::TEMP_OFFSET || param == ConfigManager::Param::HUMIDITY_OFFSET) {
@@ -392,6 +406,13 @@ void SMSProcessor::handleWriteConfigCommand(const String &rest, const String &se
                 log_w("[CMD] Mismatch: wrote %d but read %d", val, readback);
             }
         }
+        success = true;
+    }
+    else if (param == ConfigManager::Param::WIFI_SSID || param == ConfigManager::Param::WIFI_PASSWORD) {
+        // String parameters (WiFi credentials)
+        _configManager.setStringParam(param, valueStr);
+        log_i("[CMD] Set %s (length: %d)", ConfigManager::getParamName(param).c_str(), valueStr.length());
+        confirmMsg = "OK: " + ConfigManager::getParamName(param) + " set (length: " + String(valueStr.length()) + ")";
         success = true;
     }
     
@@ -539,6 +560,7 @@ void SMSProcessor::handleHelpCommand(const String &senderNumber) {
         helpMsg += "REMOVEPHONE <i|n> - Remove\n";
         helpMsg += "MUTE <i|n|me> - Mute alerts\n";
         helpMsg += "UNMUTE <i|n|me> - Unmute alerts\n";
+        helpMsg += "OTA - Firmware update\n";
         helpMsg += "\nLegend:\n";
         helpMsg += "<i|n>=index/number\n";
         helpMsg += "<p>=admin|read\n";
@@ -634,4 +656,35 @@ void SMSProcessor::handleACKCommand(const String &rest, const String &senderNumb
         _sender.send(senderNumber, "ERROR: Unknown alert code [" + code + "]");
     }
 }
+
+void SMSProcessor::handleOTACommand(const String &senderNumber) {
+    log_i("[CMD] OTA command received from %s", senderNumber.c_str());
+    
+    // Check if alert list is empty
+    String alertsList = _alertManager.getPendingAlertsList();
+    
+    // Simple check: if the message doesn't contain any active alerts, proceed
+    // The alertsList will contain just the header if empty
+    if (alertsList.indexOf("[") != -1) {
+        // Found an alert (format is [code], so if no '[' it's just the header)
+        log_w("[CMD] OTA blocked: pending alerts exist");
+        _sender.send(senderNumber, "ERROR: OTA blocked due to pending alerts.\nClear alerts with: CLEAR");
+        return;
+    }
+    
+    log_i("[CMD] No pending alerts, starting OTA mode");
+    
+    // Set the requester's number for sending the URL
+    _otaManager.setRequesterNumber(senderNumber);
+    
+    // Start OTA mode
+    if (_otaManager.init()) {
+        log_i("[OK] OTA mode started successfully");
+        // URL is sent inside init() via sendURLtoSMS()
+    } else {
+        log_e("[CMD] Failed to start OTA mode");
+        _sender.send(senderNumber, "ERROR: Failed to start OTA mode. Check WiFi config.");
+    }
+}
+
 

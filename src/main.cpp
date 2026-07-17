@@ -34,6 +34,7 @@
 #include "PhoneNumberManager.h"
 #include "ClockManager.h"
 #include "AlertManager.h"
+#include "OTAManager.h"
 
 Modem                        modem;
 SMSSender                    sender(modem.getModem(), modem.getSerialStream());
@@ -46,7 +47,8 @@ AlertManager                 alertManager(sender, configManager, phoneNumberMana
 BatteryProcessor             batteryProcessor(sender, ROOT_NUMBER, configManager, phoneNumberManager);
 MainPowerCheck               mainPowerCheck(sender, ROOT_NUMBER, configManager, phoneNumberManager, alertManager);
 TemperatureHumidityProcessor tempHumidityProcessor(sender, ROOT_NUMBER, BOARD_DHT_PIN, configManager, phoneNumberManager, alertManager);
-SMSProcessor                 processor(sender, ROOT_NUMBER, reader, mainPowerCheck, batteryProcessor, tempHumidityProcessor, configManager, phoneNumberManager, alertManager, clockManager);
+OTAManager                   otaManager(sender, ROOT_NUMBER, configManager, phoneNumberManager, alertManager);
+SMSProcessor                 processor(sender, ROOT_NUMBER, reader, mainPowerCheck, batteryProcessor, tempHumidityProcessor, configManager, phoneNumberManager, alertManager, clockManager, otaManager);
 SerialConsole                console(reader, forwarder, batteryProcessor, mainPowerCheck, configManager);
 
 void setup()
@@ -76,7 +78,10 @@ void setup()
 
     // Send power-on notification to all authorized numbers
     log_i("Sending power-on notification...");
-    String powerOnMsg = "Device powered on";
+    String powerOnMsg = "Device powered on" 
+    #ifdef GIT_REV
+        + String(" (Rev ") + String(GIT_REV) + String(")");
+    #endif
     
     for (const auto &entry : phoneNumberManager.getAllNumbers()) {
         if (modem.getModem().sendSMS(entry.number, powerOnMsg)) {
@@ -121,6 +126,9 @@ void loop()
 
     // Check pending alerts and resend if needed
     alertManager.check();
+
+    // Check OTA web server if active
+    otaManager.check();
 
     delay(100);
 }

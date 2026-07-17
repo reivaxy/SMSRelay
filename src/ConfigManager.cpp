@@ -108,6 +108,8 @@ String ConfigManager::getParamKey(Param param) {
         case Param::TEMP_OFFSET:             return "TEMP_OFFSET";
         case Param::HUMIDITY_OFFSET:         return "HUMIDITY_OFFSET";
         case Param::ALERT_RESEND_DELAY_MINS: return "RESEND_MINS";
+        case Param::WIFI_SSID:               return "WIFI_SSID";
+        case Param::WIFI_PASSWORD:           return "WIFI_PASS";
     }
     return "UNKNOWN";
 }
@@ -127,12 +129,14 @@ bool ConfigManager::parseParamName(const String &userInput, Param &outParam) {
     else if (input == "TEMP_OFFSET") { outParam = Param::TEMP_OFFSET; return true; }
     else if (input == "HUMIDITY_OFFSET") { outParam = Param::HUMIDITY_OFFSET; return true; }
     else if (input == "RESEND_MINS") { outParam = Param::ALERT_RESEND_DELAY_MINS; return true; }
+    else if (input == "WIFI_SSID") { outParam = Param::WIFI_SSID; return true; }
+    else if (input == "WIFI_PWD" || input == "WIFI_PASSWORD") { outParam = Param::WIFI_PASSWORD; return true; }
     
     return false;
 }
 
 String ConfigManager::getValidParamNames() {
-    return "TEMP_HIGH, TEMP_LOW, TEMP_OFFSET, HUMIDITY_HIGH, HUMIDITY_LOW, HUMIDITY_OFFSET, BAT_THRESHOLD, BAT_NEAR_EMPTY, POWER_THRESHOLD, RESEND_MINS";
+    return "TEMP_HIGH, TEMP_LOW, TEMP_OFFSET, HUMIDITY_HIGH, HUMIDITY_LOW, HUMIDITY_OFFSET, BAT_THRESHOLD, BAT_NEAR_EMPTY, POWER_THRESHOLD, RESEND_MINS, WIFI_SSID, WIFI_PWD";
 }
 
 String ConfigManager::getParamName(Param param) {
@@ -147,6 +151,8 @@ String ConfigManager::getParamName(Param param) {
         case Param::TEMP_OFFSET:             return "Temp Offset";
         case Param::HUMIDITY_OFFSET:         return "Humidity Offset";
         case Param::ALERT_RESEND_DELAY_MINS: return "Alert Resend Delay (min)";
+        case Param::WIFI_SSID:               return "WiFi SSID";
+        case Param::WIFI_PASSWORD:           return "WiFi Password";
     }
     return "Unknown";
 }
@@ -185,6 +191,16 @@ String ConfigManager::getParamInfo(Param param) {
         return name + ": " + String(val, 1) + unit;
     }
     
+    // String parameters
+    if (param == Param::WIFI_SSID || param == Param::WIFI_PASSWORD) {
+        String val = getStringParam(param);
+        if (param == Param::WIFI_PASSWORD) {
+            return name + ": " + (val.length() > 0 ? "***" : "(not set)");
+        } else {
+            return name + ": " + (val.length() > 0 ? val : "(not set)");
+        }
+    }
+    
     // Int parameters
     int val = getInt(param);
     if (param == Param::ALERT_RESEND_DELAY_MINS) {
@@ -204,6 +220,43 @@ String ConfigManager::getAllParams() {
     msg += getParamInfo(Param::BAT_ADC_THRESHOLD) + "\n";
     msg += getParamInfo(Param::BAT_ADC_NEAR_EMPTY) + "\n";
     msg += getParamInfo(Param::POWER_ADC_THRESHOLD) + "\n";
-    msg += getParamInfo(Param::ALERT_RESEND_DELAY_MINS);
+    msg += getParamInfo(Param::ALERT_RESEND_DELAY_MINS) + "\n";
+    msg += getParamInfo(Param::WIFI_SSID) + "\n";
+    msg += getParamInfo(Param::WIFI_PASSWORD);
     return msg;
+}
+
+void ConfigManager::setWiFiSSID(const String &ssid) {
+    _prefs.putString("WIFI_SSID", ssid);
+    log_i("[CONFIG] WiFi SSID set to: %s", ssid.c_str());
+}
+
+String ConfigManager::getWiFiSSID() {
+    String ssid = _prefs.getString("WIFI_SSID", "");
+    log_d("[CONFIG] WiFi SSID retrieved: %s", ssid.length() > 0 ? "***" : "(empty)");
+    return ssid;
+}
+
+void ConfigManager::setWiFiPassword(const String &password) {
+    _prefs.putString("WIFI_PASS", password);
+    log_i("[CONFIG] WiFi password set (length: %d)", password.length());
+}
+
+String ConfigManager::getWiFiPassword() {
+    String password = _prefs.getString("WIFI_PASS", "");
+    log_d("[CONFIG] WiFi password retrieved (length: %d)", password.length());
+    return password;
+}
+
+String ConfigManager::getStringParam(Param param) {
+    String key = getParamKey(param);
+    String val = _prefs.getString(key.c_str(), "");
+    log_d("[CONFIG] getString(%s) = %s", key.c_str(), val.length() > 0 ? "***" : "(empty)");
+    return val;
+}
+
+void ConfigManager::setStringParam(Param param, const String &value) {
+    String key = getParamKey(param);
+    _prefs.putString(key.c_str(), value);
+    log_i("[CONFIG] setString(%s) = %s", key.c_str(), value.length() > 0 ? "***" : "(empty)");
 }

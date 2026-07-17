@@ -381,7 +381,8 @@ void SMSProcessor::handleWriteConfigCommand(const String &rest, const String &se
         success = true;
     }
     else if (param == ConfigManager::Param::BAT_ADC_THRESHOLD || param == ConfigManager::Param::BAT_ADC_NEAR_EMPTY ||
-             param == ConfigManager::Param::POWER_ADC_THRESHOLD || param == ConfigManager::Param::ALERT_RESEND_DELAY_MINS) {
+             param == ConfigManager::Param::POWER_ADC_THRESHOLD || param == ConfigManager::Param::ALERT_RESEND_DELAY_MINS ||
+             param == ConfigManager::Param::NTP_RESYNC_HOURS || param == ConfigManager::Param::DST_OFFSET) {
         // Int parameters
         int val = valueStr.toInt();
         _configManager.setInt(param, val);
@@ -398,7 +399,25 @@ void SMSProcessor::handleWriteConfigCommand(const String &rest, const String &se
                 confirmMsg = "WARNING: " + paramUserName + " set to " + String(val) + " but readback shows " + String(readback);
                 log_w("[CMD] Mismatch: wrote %d but read %d", val, readback);
             }
-        } else {
+        }
+        else if (param == ConfigManager::Param::NTP_RESYNC_HOURS) {
+            if (readback == val) {
+                confirmMsg = "OK: " + paramUserName + " set to " + String(val) + " hours";
+            } else {
+                confirmMsg = "WARNING: " + paramUserName + " set to " + String(val) + " but readback shows " + String(readback);
+                log_w("[CMD] Mismatch: wrote %d but read %d", val, readback);
+            }
+        }
+        else if (param == ConfigManager::Param::DST_OFFSET) {
+            float hours = val / 3600.0f;
+            if (readback == val) {
+                confirmMsg = "OK: " + paramUserName + " set to " + String(hours, 1) + " hours";
+            } else {
+                confirmMsg = "WARNING: " + paramUserName + " set to " + String(hours, 1) + " but readback shows " + String((float)readback / 3600.0f, 1);
+                log_w("[CMD] Mismatch: wrote %d but read %d", val, readback);
+            }
+        }
+        else {
             if (readback == val) {
                 confirmMsg = "OK: " + paramUserName + " set to " + String(val);
             } else {

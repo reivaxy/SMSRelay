@@ -20,7 +20,9 @@ public:
         HUMIDITY_OFFSET,         // Humidity offset for sensor calibration (float, percentage, can be negative)
         ALERT_RESEND_DELAY_MINS, // Alert resend delay in minutes (int, default 5)
         WIFI_SSID,               // WiFi network SSID (string)
-        WIFI_PASSWORD            // WiFi network password (string)
+        WIFI_PASSWORD,           // WiFi network password (string)
+        NTP_RESYNC_HOURS,        // NTP time resync interval in hours (int, default 4)
+        DST_OFFSET               // Daylight Saving Time offset in seconds (int, 0 for winter, 3600 for +1hr, 7200 for +2hrs)
     };
 
     // Default values
@@ -35,6 +37,8 @@ public:
         static constexpr float TEMP_OFFSET = 0.0f;
         static constexpr float HUMIDITY_OFFSET = 0.0f;
         static constexpr int ALERT_RESEND_DELAY_MINS = 5;
+        static constexpr int NTP_RESYNC_HOURS = 4;
+        static constexpr int DST_OFFSET = 0;  // 0 for winter time, 3600 for +1hr, 7200 for +2hrs
     };
 
     ConfigManager();

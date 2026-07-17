@@ -34,6 +34,8 @@ void ConfigManager::init() {
         if (!_prefs.isKey("TEMP_OFFSET")) _prefs.putFloat("TEMP_OFFSET", Defaults::TEMP_OFFSET);
         if (!_prefs.isKey("HUMIDITY_OFFSET")) _prefs.putFloat("HUMIDITY_OFFSET", Defaults::HUMIDITY_OFFSET);
         if (!_prefs.isKey("RESEND_MINS")) _prefs.putInt("RESEND_MINS", Defaults::ALERT_RESEND_DELAY_MINS);
+        if (!_prefs.isKey("NTP_RESYNC_HRS")) _prefs.putInt("NTP_RESYNC_HRS", Defaults::NTP_RESYNC_HOURS);
+        if (!_prefs.isKey("DST_OFFSET")) _prefs.putInt("DST_OFFSET", Defaults::DST_OFFSET);
         
         // Clean up any old/stray keys that might interfere
         const char* oldKeys[] = {"ALERT_RESEND_DELAY_MINS", "ALERT_RESEND_MIN", "BAT_ADC_THRESHOLD", "BAT_ADC_NEAR_EMPTY", "POWER_ADC_THRESHOLD"};
@@ -93,6 +95,8 @@ void ConfigManager::resetAllToDefaults() {
     _prefs.putFloat("TEMP_OFFSET", Defaults::TEMP_OFFSET);
     _prefs.putFloat("HUMIDITY_OFFSET", Defaults::HUMIDITY_OFFSET);
     _prefs.putInt("RESEND_MINS", Defaults::ALERT_RESEND_DELAY_MINS);
+    _prefs.putInt("NTP_RESYNC_HRS", Defaults::NTP_RESYNC_HOURS);
+    _prefs.putInt("DST_OFFSET", Defaults::DST_OFFSET);
     log_i("[CONFIG] All parameters reset to defaults");
 }
 
@@ -110,6 +114,8 @@ String ConfigManager::getParamKey(Param param) {
         case Param::ALERT_RESEND_DELAY_MINS: return "RESEND_MINS";
         case Param::WIFI_SSID:               return "WIFI_SSID";
         case Param::WIFI_PASSWORD:           return "WIFI_PASS";
+        case Param::NTP_RESYNC_HOURS: return "NTP_RESYNC_HRS";
+        case Param::DST_OFFSET:      return "DST_OFFSET";
     }
     return "UNKNOWN";
 }
@@ -131,12 +137,14 @@ bool ConfigManager::parseParamName(const String &userInput, Param &outParam) {
     else if (input == "RESEND_MINS") { outParam = Param::ALERT_RESEND_DELAY_MINS; return true; }
     else if (input == "WIFI_SSID") { outParam = Param::WIFI_SSID; return true; }
     else if (input == "WIFI_PWD" || input == "WIFI_PASSWORD") { outParam = Param::WIFI_PASSWORD; return true; }
+    else if (input == "NTP_RESYNC_HRS" || input == "NTP_INTERVAL" || input == "NTP_RESYNC_INTERVAL_HOURS") { outParam = Param::NTP_RESYNC_HOURS; return true; }
+    else if (input == "DST_OFFSET" || input == "DST_OFFSET_SECONDS") { outParam = Param::DST_OFFSET; return true; }
     
     return false;
 }
 
 String ConfigManager::getValidParamNames() {
-    return "TEMP_HIGH, TEMP_LOW, TEMP_OFFSET, HUMIDITY_HIGH, HUMIDITY_LOW, HUMIDITY_OFFSET, BAT_THRESHOLD, BAT_NEAR_EMPTY, POWER_THRESHOLD, RESEND_MINS, WIFI_SSID, WIFI_PWD";
+    return "TEMP_HIGH, TEMP_LOW, TEMP_OFFSET, HUMIDITY_HIGH, HUMIDITY_LOW, HUMIDITY_OFFSET, BAT_THRESHOLD, BAT_NEAR_EMPTY, POWER_THRESHOLD, RESEND_MINS, WIFI_SSID, WIFI_PWD, NTP_RESYNC_HRS, DST_OFFSET";
 }
 
 String ConfigManager::getParamName(Param param) {
@@ -153,6 +161,8 @@ String ConfigManager::getParamName(Param param) {
         case Param::ALERT_RESEND_DELAY_MINS: return "Alert Resend Delay (min)";
         case Param::WIFI_SSID:               return "WiFi SSID";
         case Param::WIFI_PASSWORD:           return "WiFi Password";
+        case Param::NTP_RESYNC_HOURS: return "NTP Resync Interval (hours)";
+        case Param::DST_OFFSET:      return "DST Offset (seconds)";
     }
     return "Unknown";
 }
@@ -171,11 +181,13 @@ float ConfigManager::getDefaultFloatValue(Param param) {
 
 int ConfigManager::getDefaultIntValue(Param param) {
     switch (param) {
-        case Param::BAT_ADC_THRESHOLD:       return Defaults::BAT_ADC_THRESHOLD;
-        case Param::BAT_ADC_NEAR_EMPTY:      return Defaults::BAT_ADC_NEAR_EMPTY;
-        case Param::POWER_ADC_THRESHOLD:     return Defaults::POWER_ADC_THRESHOLD;
-        case Param::ALERT_RESEND_DELAY_MINS: return Defaults::ALERT_RESEND_DELAY_MINS;
-        default:                             return 0;
+        case Param::BAT_ADC_THRESHOLD:         return Defaults::BAT_ADC_THRESHOLD;
+        case Param::BAT_ADC_NEAR_EMPTY:        return Defaults::BAT_ADC_NEAR_EMPTY;
+        case Param::POWER_ADC_THRESHOLD:       return Defaults::POWER_ADC_THRESHOLD;
+        case Param::ALERT_RESEND_DELAY_MINS:   return Defaults::ALERT_RESEND_DELAY_MINS;
+        case Param::NTP_RESYNC_HOURS: return Defaults::NTP_RESYNC_HOURS;
+        case Param::DST_OFFSET:        return Defaults::DST_OFFSET;
+        default:                               return 0;
     }
 }
 
@@ -206,6 +218,13 @@ String ConfigManager::getParamInfo(Param param) {
     if (param == Param::ALERT_RESEND_DELAY_MINS) {
         return name + ": " + String(val) + " min";
     }
+    if (param == Param::NTP_RESYNC_HOURS) {
+        return name + ": " + String(val) + " hours";
+    }
+    if (param == Param::DST_OFFSET) {
+        float hours = val / 3600.0f;
+        return name + ": " + String(hours, 1) + " hours";
+    }
     return name + ": " + String(val);
 }
 
@@ -222,7 +241,9 @@ String ConfigManager::getAllParams() {
     msg += getParamInfo(Param::POWER_ADC_THRESHOLD) + "\n";
     msg += getParamInfo(Param::ALERT_RESEND_DELAY_MINS) + "\n";
     msg += getParamInfo(Param::WIFI_SSID) + "\n";
-    msg += getParamInfo(Param::WIFI_PASSWORD);
+    msg += getParamInfo(Param::WIFI_PASSWORD) + "\n";
+    msg += getParamInfo(Param::NTP_RESYNC_HOURS) + "\n";
+    msg += getParamInfo(Param::DST_OFFSET);
     return msg;
 }
 

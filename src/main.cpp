@@ -42,7 +42,7 @@ SMSReader                    reader(modem.getModem(), modem.getSerialStream());
 SMSForwarder                 forwarder(sender, ROOT_NUMBER);
 ConfigManager                configManager;
 PhoneNumberManager           phoneNumberManager(ROOT_NUMBER);
-ClockManager                 clockManager(modem.getModem());
+ClockManager                 clockManager(modem.getModem(), configManager);
 AlertManager                 alertManager(sender, configManager, phoneNumberManager, clockManager);
 BatteryProcessor             batteryProcessor(sender, ROOT_NUMBER, configManager, phoneNumberManager);
 MainPowerCheck               mainPowerCheck(sender, ROOT_NUMBER, configManager, phoneNumberManager, alertManager);

@@ -2,21 +2,24 @@
 #include <Arduino.h>
 #include <TinyGsmClient.h>
 
-// Manages system time synchronization with the network and local time tracking.
-// - Synchronizes time from the mobile network on connection
-// - Resynchronizes every 5 minutes
-// - Increments local time each second based on millis()
+class ConfigManager;
+
+// Manages system time synchronization with NTP (primary) and fallback to mobile network.
+// - At initialization: Enable WiFi STA mode, sync from NTP server, disable WiFi
+// - Clock increments every second based on millis()
+// - Resynchronizes from NTP every 4 hours (or configured interval)
+// - Falls back to mobile network time if NTP is unavailable
 // - Provides methods to get current time and formatted timestamps
 class ClockManager {
 public:
-    ClockManager(TinyGsm &modem);
+    ClockManager(TinyGsm &modem, ConfigManager &configManager);
     ~ClockManager();
 
-    // Initialize clock from network time (call after modem connects)
-    // Returns true if successfully synced, false if network time unavailable
+    // Initialize clock from NTP (primary), fallback to mobile network time
+    // Returns true if successfully synced, false if neither source available
     bool init();
 
-    // Called periodically from loop() to resync with network every 5 minutes
+    // Called periodically from loop() to resync with NTP every 4 hours (or configured)
     void check();
 
     // Get current Unix timestamp (seconds since epoch)
@@ -35,18 +38,38 @@ public:
     bool isInitialized() const { return _initialized; }
 
 private:
-    // Synchronize time from network
-    bool syncWithNetwork();
+    // Synchronize time from NTP via WiFi
+    bool syncWithNTP();
+
+    // Synchronize time from mobile network (fallback)
+    bool syncWithMobileNetwork();
+
+    // Enable WiFi in STA mode
+    bool enableWiFi();
+
+    // Disable WiFi (turn it off)
+    void disableWiFi();
+
+    // Wait for WiFi connection
+    bool waitForWiFiConnection(unsigned long timeoutMs = 30000);
 
     // Calculate current time based on initial sync and elapsed milliseconds
     unsigned long calculateCurrentTime();
 
     TinyGsm    &_modem;
+    ConfigManager &_configManager;
     bool       _initialized;
-    unsigned long _epochTime;         // Last synced Unix timestamp
-    unsigned long _millisecondsAtSync; // millis() value when we synced
-    unsigned long _lastSyncTime;      // millis() of last sync check
+    unsigned long _epochTime;           // Last synced Unix timestamp
+    unsigned long _millisecondsAtSync;  // millis() value when we synced
+    unsigned long _lastNtpSyncTime;     // millis() of last NTP sync
+    unsigned long _ntpResyncIntervalMs; // Resync interval in milliseconds
+    int        _tzOffsetSec;            // Timezone offset in seconds (from network)
 
-    static const unsigned long RESYNC_INTERVAL_MS = 5 * 60 * 1000;       // 5 minutes
-    static const unsigned long SYNC_CHECK_INTERVAL_MS = 60000;           // Check every 60 seconds
+    // Detect network timezone from modem
+    bool detectNetworkTimezone();
+
+    // NTP configuration
+    static const char* NTP_SERVER1;
+    static const char* NTP_SERVER2;
+    static const char* NTP_SERVER3;
 };

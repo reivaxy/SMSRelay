@@ -4,14 +4,15 @@
 #include "BatteryProcessor.h"
 #include "MainPowerCheck.h"
 #include "AlertManager.h"
+#include "ClockManager.h"
 #include "utilities.h"
 
 SMSProcessor::SMSProcessor(SMSSender &sender, const String &targetNumber, SMSReader &reader, 
                            MainPowerCheck &mainPowerCheck, BatteryProcessor &batteryProcessor, TemperatureHumidityProcessor &tempHumidityProcessor,
-                           ConfigManager &configManager, PhoneNumberManager &phoneNumberManager, AlertManager &alertManager)
+                           ConfigManager &configManager, PhoneNumberManager &phoneNumberManager, AlertManager &alertManager, ClockManager &clockManager)
     : _sender(sender), _targetNumber(targetNumber), _reader(reader), _mainPowerCheck(mainPowerCheck),
       _batteryProcessor(batteryProcessor), _tempHumidityProcessor(tempHumidityProcessor), 
-      _configManager(configManager), _phoneNumberManager(phoneNumberManager), _alertManager(alertManager) {}
+      _configManager(configManager), _phoneNumberManager(phoneNumberManager), _alertManager(alertManager), _clockManager(clockManager) {}
 
 void SMSProcessor::process(const ReceivedSMS &sms)
 {
@@ -309,7 +310,8 @@ void SMSProcessor::handleLevelCommand(const String &senderNumber)
 void SMSProcessor::handleReadConfigCommand(const String &senderNumber)
 {
     log_i("[CMD] Config query received");
-    String configMsg = _configManager.getAllParams();
+    String configMsg = "Time: " + _clockManager.getFormattedDateTime() + "\n";
+    configMsg += _configManager.getAllParams();
     log_i("[CMD] %s", configMsg.c_str());
     _sender.send(senderNumber, configMsg);
 }

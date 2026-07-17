@@ -4,12 +4,14 @@
 #include "SMSSender.h"
 #include "ConfigManager.h"
 #include "PhoneNumberManager.h"
+#include "ClockManager.h"
 
 // Manages alert sending with acknowledgment (ACK) system.
 // - Each alert gets a unique 3-digit random code
 // - Alerts are resent every 5 minutes (configurable) until ACKed
 // - Tracks ACKs per phone number and notifies others when alert is ACKed
 // - Respects muted phone numbers (won't send to muted but they can ACK)
+// - Stores timestamp when alert is triggered (if ClockManager is available)
 class AlertManager {
 public:
     // Alert priority levels (optional for future enhancement)
@@ -19,7 +21,7 @@ public:
         PRIORITY_HIGH    // Should always be sent? (future feature)
     };
 
-    AlertManager(SMSSender &sender, ConfigManager &configManager, PhoneNumberManager &phoneNumberManager);
+    AlertManager(SMSSender &sender, ConfigManager &configManager, PhoneNumberManager &phoneNumberManager, ClockManager &clockManager);
     ~AlertManager();
 
     // Send or queue an alert with automatic code generation
@@ -47,6 +49,8 @@ private:
         String message;        // Alert message text
         String cause;          // What triggered the alert (for LISTALERTS display)
         unsigned long created; // When alert was created (millis)
+        unsigned long createdTime; // Unix timestamp when alert was triggered
+        String createdTimeStr; // Formatted date/time when alert was triggered
         unsigned long lastSent;// When alert was last sent (millis)
         AlertLevel level;      // Alert priority level
         std::vector<String> ackedBy; // List of phone numbers that ACKed
@@ -67,6 +71,7 @@ private:
     SMSSender              &_sender;
     ConfigManager          &_configManager;
     PhoneNumberManager     &_phoneNumberManager;
+    ClockManager           &_clockManager;
     std::vector<Alert>     _pendingAlerts;
     unsigned long          _lastCheck;
 };

@@ -3,8 +3,8 @@
 #include "utilities.h"
 #include <random>
 
-AlertManager::AlertManager(SMSSender &sender, ConfigManager &configManager, PhoneNumberManager &phoneNumberManager)
-    : _sender(sender), _configManager(configManager), _phoneNumberManager(phoneNumberManager), _lastCheck(0) {
+AlertManager::AlertManager(SMSSender &sender, ConfigManager &configManager, PhoneNumberManager &phoneNumberManager, ClockManager &clockManager)
+    : _sender(sender), _configManager(configManager), _phoneNumberManager(phoneNumberManager), _clockManager(clockManager), _lastCheck(0) {
     log_i("[ALERT] AlertManager initialized");
 }
 
@@ -52,6 +52,8 @@ String AlertManager::sendAlert(const String &title, const String &message, const
     newAlert.message = message;
     newAlert.cause = cause;
     newAlert.created = millis();
+    newAlert.createdTime = _clockManager.getCurrentTime();
+    newAlert.createdTimeStr = _clockManager.getFormattedDateTime();
     newAlert.lastSent = 0;  // Will be sent immediately
     newAlert.level = level;
     
@@ -60,7 +62,7 @@ String AlertManager::sendAlert(const String &title, const String &message, const
     // Send immediately to all non-muted numbers
     sendAlertToAll(_pendingAlerts.back());
     
-    log_i("[ALERT] New alert created: code=%s, title=%s, cause=%s", code.c_str(), title.c_str(), cause.c_str());
+    log_i("[ALERT] New alert created: code=%s, title=%s, cause=%s, time=%s", code.c_str(), title.c_str(), cause.c_str(), newAlert.createdTimeStr.c_str());
     
     return code;
 }
@@ -228,6 +230,9 @@ String AlertManager::getPendingAlertsList() {
         msg += "[" + alert.code + "] " + alert.title;
         if (!alert.cause.isEmpty()) {
             msg += " (" + alert.cause + ")";
+        }
+        if (!alert.createdTimeStr.isEmpty()) {
+            msg += " @ " + alert.createdTimeStr;
         }
         if (!alert.ackedBy.empty()) {
             msg += " [ACK:" + String((int)alert.ackedBy.size()) + "]";

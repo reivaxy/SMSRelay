@@ -32,6 +32,7 @@
 #include "TemperatureHumidityProcessor.h"
 #include "ConfigManager.h"
 #include "PhoneNumberManager.h"
+#include "ClockManager.h"
 #include "AlertManager.h"
 
 Modem                        modem;
@@ -40,11 +41,12 @@ SMSReader                    reader(modem.getModem(), modem.getSerialStream());
 SMSForwarder                 forwarder(sender, ROOT_NUMBER);
 ConfigManager                configManager;
 PhoneNumberManager           phoneNumberManager(ROOT_NUMBER);
-AlertManager                 alertManager(sender, configManager, phoneNumberManager);
+ClockManager                 clockManager(modem.getModem());
+AlertManager                 alertManager(sender, configManager, phoneNumberManager, clockManager);
 BatteryProcessor             batteryProcessor(sender, ROOT_NUMBER, configManager, phoneNumberManager);
 MainPowerCheck               mainPowerCheck(sender, ROOT_NUMBER, configManager, phoneNumberManager, alertManager);
 TemperatureHumidityProcessor tempHumidityProcessor(sender, ROOT_NUMBER, BOARD_DHT_PIN, configManager, phoneNumberManager, alertManager);
-SMSProcessor                 processor(sender, ROOT_NUMBER, reader, mainPowerCheck, batteryProcessor, tempHumidityProcessor, configManager, phoneNumberManager, alertManager);
+SMSProcessor                 processor(sender, ROOT_NUMBER, reader, mainPowerCheck, batteryProcessor, tempHumidityProcessor, configManager, phoneNumberManager, alertManager, clockManager);
 SerialConsole                console(reader, forwarder, batteryProcessor, mainPowerCheck, configManager);
 
 void setup()
@@ -64,6 +66,12 @@ void setup()
     if (!modem.init()) {
         log_e("Modem initialization failed");
         return;
+    }
+
+    // Initialize clock manager with network time (after modem connects)
+    log_i("Initializing clock from network time...");
+    if (!clockManager.init()) {
+        log_w("Failed to initialize clock from network, clock will continue with millis() offset");
     }
 
     // Send power-on notification to all authorized numbers
@@ -89,6 +97,9 @@ void loop()
 
     // Check modem connection periodically and reconnect if needed
     modem.checkConnection();
+
+    // Check clock synchronization with network (every 2 hours)
+    clockManager.check();
 
     // Check for incoming SMS periodically (but only if modem is connected)
     static unsigned long lastCheck = 0;

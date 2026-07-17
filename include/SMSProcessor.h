@@ -10,6 +10,7 @@ class TemperatureHumidityProcessor;
 class BatteryProcessor;
 class ConfigManager;
 class AlertManager;
+class ClockManager;
 
 // Handles command SMS received from authorized phone numbers.
 // Supported commands:
@@ -35,7 +36,7 @@ class SMSProcessor {
 public:
     SMSProcessor(SMSSender &sender, const String &targetNumber, SMSReader &reader, 
                  MainPowerCheck &mainPowerCheck, BatteryProcessor &batteryProcessor, TemperatureHumidityProcessor &tempHumidityProcessor,
-                 ConfigManager &configManager, PhoneNumberManager &phoneNumberManager, AlertManager &alertManager);
+                 ConfigManager &configManager, PhoneNumberManager &phoneNumberManager, AlertManager &alertManager, ClockManager &clockManager);
 
     // Processes a command SMS. The original SMS is always considered handled
     // (caller should delete it regardless of individual command success).
@@ -76,4 +77,5 @@ private:
     ConfigManager                    &_configManager;
     PhoneNumberManager               &_phoneNumberManager;
     AlertManager                     &_alertManager;
+    ClockManager                     &_clockManager;
 };

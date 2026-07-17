@@ -74,6 +74,12 @@ int MainPowerCheck::readGPIO00ADC()
 #endif
 }
 
+bool MainPowerCheck::isMainPowerAvailable() const {
+    int powerAdcThreshold = _configManager.getInt(ConfigManager::Param::POWER_ADC_THRESHOLD);
+    int adcValue = readGPIO00ADC();
+    return adcValue >= powerAdcThreshold;
+}
+
 void MainPowerCheck::resetAlertFlags()
 {
     log_i("Resetting main power alert flags");

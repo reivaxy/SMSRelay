@@ -8,6 +8,9 @@
 #include "PhoneNumberManager.h"
 #include "AlertManager.h"
 
+// Forward declarations
+class MainPowerCheck;
+
 // Manages OTA firmware updates via WiFi and file upload.
 // Features:
 // - Connects to configured WiFi SSID/Password
@@ -16,10 +19,14 @@
 // - Performs firmware update from uploaded file
 // - Auto-restarts device after successful update
 // - WiFi disabled until next OTA request
+// - 90-second timeout for file upload initiation; if upload doesn't start, OTA is cancelled
 class OTAManager {
 public:
+    // OTA upload timeout: 90 seconds from init() to first byte of upload
+    static const unsigned long OTA_UPLOAD_TIMEOUT_MS = 90000;
+
     OTAManager(SMSSender &sender, const String &targetNumber, ConfigManager &configManager, 
-               PhoneNumberManager &phoneNumberManager, AlertManager &alertManager);
+               PhoneNumberManager &phoneNumberManager, AlertManager &alertManager, MainPowerCheck &mainPowerCheck);
     ~OTAManager();
 
     // Initialize OTA manager (connects to WiFi, starts web server)
@@ -68,10 +75,12 @@ private:
     ConfigManager          &_configManager;
     PhoneNumberManager     &_phoneNumberManager;
     AlertManager           &_alertManager;
+    MainPowerCheck         &_mainPowerCheck;
     
     WebServer              *_webServer;
     bool                   _isActive;
     unsigned long          _startTime;
+    bool                   _uploadStarted;
     String                 _requesterNumber;
     size_t                 _uploadedBytes;
     bool                   _updateInProgress;

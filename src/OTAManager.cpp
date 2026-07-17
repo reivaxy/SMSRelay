@@ -1,13 +1,14 @@
 #include "OTAManager.h"
+#include "MainPowerCheck.h"
 #include "utilities.h"
 #include <esp_wifi.h>
 #include <esp_ota_ops.h>
 
 OTAManager::OTAManager(SMSSender &sender, const String &targetNumber, ConfigManager &configManager, 
-                       PhoneNumberManager &phoneNumberManager, AlertManager &alertManager)
+                       PhoneNumberManager &phoneNumberManager, AlertManager &alertManager, MainPowerCheck &mainPowerCheck)
     : _sender(sender), _targetNumber(targetNumber), _configManager(configManager),
-      _phoneNumberManager(phoneNumberManager), _alertManager(alertManager),
-      _webServer(nullptr), _isActive(false), _startTime(0), _uploadedBytes(0), _updateInProgress(false),
+      _phoneNumberManager(phoneNumberManager), _alertManager(alertManager), _mainPowerCheck(mainPowerCheck),
+      _webServer(nullptr), _isActive(false), _startTime(0), _uploadStarted(false), _uploadedBytes(0), _updateInProgress(false),
       _updateCompleted(false) {
     log_i("[OTA] OTAManager initialized");
 }
@@ -22,8 +23,15 @@ bool OTAManager::init() {
         return false;
     }
 
+    // Check if device is powered by main power
+    if (!_mainPowerCheck.isMainPowerAvailable()) {
+        log_w("[OTA] OTA denied: Device is not powered by main power");
+        _sender.send(_targetNumber, "ERROR: OTA update denied. Device must be powered by main power, not battery.");
+        return false;
+    }
+
     log_i("[OTA] Starting OTA mode");
-    _startTime = millis();
+    _uploadStarted = false;
     _uploadedBytes = 0;
     _updateInProgress = false;
     _updateCompleted = false;
@@ -46,6 +54,9 @@ bool OTAManager::init() {
 
     // Send SMS with URL
     sendURLtoSMS();
+
+    // Start timeout countdown after SMS is sent
+    _startTime = millis();
 
     return true;
 }
@@ -130,19 +141,19 @@ String OTAManager::generateUploadPage() {
 <head>
     <meta charset='UTF-8'>
     <meta name='viewport' content='width=device-width, initial-scale=1.0'>
-    <title>OTA Firmware Update</title>
+    <title>SMSRelay OTA Firmware Update</title>
     <style>
         body {
             font-family: Arial, sans-serif;
             max-width: 600px;
-            margin: 50px auto;
-            padding: 20px;
+            margin: 10px auto;
+            padding: 0 10px;
             background-color: #f5f5f5;
         }
         .container {
             background-color: white;
             border-radius: 8px;
-            padding: 30px;
+            padding: 0 30px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.1);
         }
         h1 {
@@ -218,15 +229,36 @@ String OTAManager::generateUploadPage() {
             color: #856404;
             border: 1px solid #ffeaa7;
         }
+        .timer {
+            background-color: #fff3cd;
+            border-left: 4px solid #ff6b6b;
+            padding: 12px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            text-align: center;
+            font-weight: bold;
+        }
+        .timer.expired {
+            background-color: #f8d7da;
+            color: #721c24;
+            border-left-color: #721c24;
+        }
+        #timerValue {
+            font-size: 24px;
+            color: #ff6b6b;
+        }
+        .timer.expired #timerValue {
+            color: #721c24;
+        }
     </style>
 </head>
 <body>
     <div class='container'>
-        <h1>Firmware Update (OTA)</h1>
+        <h1>SMSRelay OTA Firmware Update</h1>
         
-        <div class='info'>
-            <strong>Device Local IP:</strong><br>
-            http://)" + getLocalIP() + R"(
+        <div class='timer' id='timerDiv'>
+            <strong>Time remaining to start upload:</strong><br>
+            <span id='timerValue'>90</span> seconds
         </div>
 
         <div class='info'>
@@ -253,7 +285,53 @@ String OTAManager::generateUploadPage() {
         <div id='status'></div>
 
         <script>
+        const OTA_TIMEOUT_SECONDS = 90;
+        const elapsedMillisAtPageLoad = )" + String(millis() - _startTime) + R"(;
+        let remainingTime = OTA_TIMEOUT_SECONDS;
+        let uploadStarted = false;
+        let pageLoadTime = Date.now();
+
+        function calculateRemainingTime() {
+            const totalElapsedMs = elapsedMillisAtPageLoad + (Date.now() - pageLoadTime);
+            const elapsedSeconds = Math.floor(totalElapsedMs / 1000);
+            return Math.max(0, OTA_TIMEOUT_SECONDS - elapsedSeconds);
+        }
+
+        function startTimer() {
+            // Initialize remaining time based on server start time
+            remainingTime = calculateRemainingTime();
+            document.getElementById('timerValue').textContent = remainingTime;
+
+            const timerInterval = setInterval(() => {
+                if (uploadStarted) {
+                    clearInterval(timerInterval);
+                    return;
+                }
+
+                remainingTime = calculateRemainingTime();
+                document.getElementById('timerValue').textContent = remainingTime;
+
+                if (remainingTime <= 0) {
+                    clearInterval(timerInterval);
+                    const timerDiv = document.getElementById('timerDiv');
+                    timerDiv.classList.add('expired');
+                    document.getElementById('timerValue').textContent = '0';
+                    const statusDiv = document.getElementById('status');
+                    statusDiv.textContent = 'OTA Session expired: No upload started within 90 seconds. Please request a new OTA session.';
+                    statusDiv.className = 'error';
+                    statusDiv.style.display = 'block';
+                    
+                    const fileInput = document.getElementById('firmwareFile');
+                    fileInput.disabled = true;
+                    document.querySelector('button').disabled = true;
+                }
+            }, 1000);
+        }
+
         function uploadFirmware() {
+            uploadStarted = true;
+            const timerDiv = document.getElementById('timerDiv');
+            timerDiv.style.display = 'none';
             const fileInput = document.getElementById('firmwareFile');
             const file = fileInput.files[0];
             const statusDiv = document.getElementById('status');
@@ -311,6 +389,9 @@ String OTAManager::generateUploadPage() {
             xhr.open('POST', '/upload');
             xhr.send(formData);
         }
+
+        // Start timer when page loads
+        window.addEventListener('load', startTimer);
         </script>
     </div>
 </body>
@@ -327,6 +408,7 @@ void OTAManager::handleFileUpload() {
 
     if (upload.status == UPLOAD_FILE_START) {
         log_i("[OTA] File upload started: %s", upload.filename.c_str());
+        _uploadStarted = true;
         _uploadedBytes = 0;
         _updateInProgress = true;
 
@@ -419,7 +501,7 @@ void OTAManager::handleUpload() {
 void OTAManager::sendURLtoSMS() {
     String localIP = getLocalIP();
     String url = "http://" + localIP;
-    String message = "OTA Mode Active!\nAccess: " + url;
+    String message = "OTA Mode Active for 90 seconds!\nAccess: " + url;
     
     log_i("[OTA] Sending URL to %s: %s", _requesterNumber.c_str(), url.c_str());
     
@@ -453,6 +535,22 @@ void OTAManager::stop() {
 
 void OTAManager::check() {
     if (!_isActive || _webServer == nullptr) {
+        return;
+    }
+
+    // Check for OTA upload timeout (90 seconds) - only if upload hasn't started
+    if (!_uploadStarted && (millis() - _startTime) >= OTA_UPLOAD_TIMEOUT_MS) {
+        log_w("[OTA] Upload timeout: no file upload started within 90 seconds");
+        
+        // Send timeout SMS
+        String timeoutMsg = "OTA timeout: No firmware upload started within 90 seconds. OTA mode cancelled.";
+        if (!_requesterNumber.isEmpty()) {
+            _sender.send(_requesterNumber, timeoutMsg);
+            log_i("[OTA] Timeout SMS sent to %s", _requesterNumber.c_str());
+        }
+        
+        // Stop OTA and disable WiFi
+        stop();
         return;
     }
 

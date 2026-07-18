@@ -34,6 +34,7 @@ class OTAManager;
 //   "MUTE <number>" - mute phone number from receiving alerts
 //   "UNMUTE <number>" - unmute phone number to receive alerts
 //   "OTA" - start OTA firmware update (requires clear alerts)
+//   "RESET" - restart the device
 class SMSProcessor {
 public:
     SMSProcessor(SMSSender &sender, const String &targetNumber, SMSReader &reader, 
@@ -65,6 +66,7 @@ private:
     void handleUnmuteCommand(const String &rest, const String &senderNumber);
     void handleACKCommand(const String &rest, const String &senderNumber);
     void handleOTACommand(const String &senderNumber);
+    void handleResetCommand(const String &senderNumber);
     
     // Check if sender has required permission level
     bool hasPermission(const String &senderNumber, PhoneNumberManager::Permission required);

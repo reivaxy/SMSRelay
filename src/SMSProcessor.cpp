@@ -139,6 +139,13 @@ void SMSProcessor::process(const ReceivedSMS &sms)
         }
         handleOTACommand(sms.number);
     }
+    else if (textUpper == "RESET") {
+        if (!hasPermission(sms.number, PhoneNumberManager::Permission::ADMIN)) {
+            sendPermissionDenied(sms.number);
+            return;
+        }
+        handleResetCommand(sms.number);
+    }
     else if (textUpper.startsWith("ACK ")) {
         handleACKCommand(sms.text.substring(4), sms.number);
     }
@@ -580,6 +587,7 @@ void SMSProcessor::handleHelpCommand(const String &senderNumber) {
         helpMsg += "MUTE <i|n|me> - Mute alerts\n";
         helpMsg += "UNMUTE <i|n|me> - Unmute alerts\n";
         helpMsg += "OTA - Firmware update\n";
+        helpMsg += "RESET - Restart device\n";
         helpMsg += "\nLegend:\n";
         helpMsg += "<i|n>=index/number\n";
         helpMsg += "<p>=admin|read\n";
@@ -704,6 +712,19 @@ void SMSProcessor::handleOTACommand(const String &senderNumber) {
         log_e("[CMD] Failed to start OTA mode");
         _sender.send(senderNumber, "ERROR: Failed to start OTA mode. Check WiFi config.");
     }
+}
+
+void SMSProcessor::handleResetCommand(const String &senderNumber) {
+    log_i("[CMD] RESET command received from %s", senderNumber.c_str());
+    
+    // Send confirmation message
+    _sender.send(senderNumber, "OK: Device restarting...");
+    
+    // Give the modem time to send the message before restarting
+    delay(1000);
+    
+    log_i("[CMD] Executing device restart");
+    ESP.restart();
 }
 
 

@@ -344,7 +344,7 @@ void SMSProcessor::handleReadConfigCommand(const String &senderNumber)
     configMsg += "Rev: " + String(GIT_REV) + "\n";
 #endif
     configMsg += _configManager.getAllParams();
-    configMsg += "Time: " + _clockManager.getFormattedDateTime() + "\n";
+    configMsg += "\nTime: " + _clockManager.getFormattedDateTime() + "\n";
     if (senderNumber != "CONSOLE") {
         log_i("[CMD] %s", configMsg.c_str());
     }

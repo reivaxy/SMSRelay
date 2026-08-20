@@ -24,7 +24,13 @@ void SMSProcessor::process(const ReceivedSMS &sms)
     textUpper.toUpperCase();
 
     // Log who's sending the command
-    auto perm = _phoneNumberManager.getPermission(sms.number);
+    // Special case: CONSOLE sender always has ADMIN permissions for serial console commands
+    PhoneNumberManager::Permission perm;
+    if (sms.number == "CONSOLE") {
+        perm = PhoneNumberManager::Permission::ADMIN;
+    } else {
+        perm = _phoneNumberManager.getPermission(sms.number);
+    }
     String permStr = (perm == PhoneNumberManager::Permission::ADMIN) ? "ADMIN" : 
                      (perm == PhoneNumberManager::Permission::READ) ? "READ" : "NONE";
     log_i("[CMD] From: %s (Permission: %s)", sms.number.c_str(), permStr.c_str());
@@ -225,7 +231,9 @@ void SMSProcessor::handleStatusCommand(const String &senderNumber)
     String mainStatus = (mainAdcValue >= powerAdcThreshold) ? "OK" : "LOW";
     statusMsg += "Main Power: " + String(mainAdcValue) + " (" + mainStatus + ")";
 
-    log_i("[CMD] %s", statusMsg.c_str());
+    if (senderNumber != "CONSOLE") {
+        log_i("[CMD] %s", statusMsg.c_str());
+    }
     _sender.send(senderNumber, statusMsg);
 }
 
@@ -320,20 +328,26 @@ void SMSProcessor::handleLevelCommand(const String &senderNumber)
         levelMsg += " [OK]";
     }
     
-    log_i("[CMD] %s", levelMsg.c_str());
+    if (senderNumber != "CONSOLE") {
+        log_i("[CMD] %s", levelMsg.c_str());
+    }
     _sender.send(senderNumber, levelMsg);
 }
 
 void SMSProcessor::handleReadConfigCommand(const String &senderNumber)
 {
-    log_i("[CMD] Config query received");
+    if (senderNumber != "CONSOLE") {
+        log_i("[CMD] Config query received");
+    }
     String configMsg = "";
 #ifdef GIT_REV
     configMsg += "Rev: " + String(GIT_REV) + "\n";
 #endif
     configMsg += _configManager.getAllParams();
     configMsg += "Time: " + _clockManager.getFormattedDateTime() + "\n";
-    log_i("[CMD] %s", configMsg.c_str());
+    if (senderNumber != "CONSOLE") {
+        log_i("[CMD] %s", configMsg.c_str());
+    }
     _sender.send(senderNumber, configMsg);
 }
 
@@ -510,7 +524,9 @@ void SMSProcessor::handleWriteConfigCommand(const String &rest, const String &se
     }
     
     if (success) {
-        log_i("[CMD] %s", confirmMsg.c_str());
+        if (senderNumber != "CONSOLE") {
+            log_i("[CMD] %s", confirmMsg.c_str());
+        }
         _sender.send(senderNumber, confirmMsg);
     }
 }
@@ -532,6 +548,10 @@ void SMSProcessor::handleClearCommand(const String &senderNumber)
 }
 
 bool SMSProcessor::hasPermission(const String &senderNumber, PhoneNumberManager::Permission required) {
+    // CONSOLE sender always has ADMIN permissions
+    if (senderNumber == "CONSOLE") {
+        return (int)PhoneNumberManager::Permission::ADMIN >= (int)required;
+    }
     auto actualPerm = _phoneNumberManager.getPermission(senderNumber);
     return (int)actualPerm >= (int)required;
 }

@@ -36,6 +36,12 @@ bool SMSSender::needsUCS2(const String &utf8)
 
 bool SMSSender::send(const String &number, const String &text)
 {
+    // Special case: CONSOLE sender should print to Serial, not send SMS
+    if (number == "CONSOLE") {
+        Serial.println(text);
+        return true;
+    }
+
     // Check if SMS sending is disabled
     if (_configManager.getInt(ConfigManager::Param::SMS_SEND_DISABLED)) {
         log_i("[SMS] SMS sending is DISABLED - logging only: to %s", number.c_str());

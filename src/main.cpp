@@ -49,7 +49,7 @@ MainPowerCheck               mainPowerCheck(sender, ROOT_NUMBER, configManager, 
 TemperatureHumidityProcessor tempHumidityProcessor(sender, ROOT_NUMBER, BOARD_DHT_PIN, configManager, phoneNumberManager, alertManager);
 OTAManager                   otaManager(sender, ROOT_NUMBER, configManager, phoneNumberManager, alertManager, mainPowerCheck);
 SMSProcessor                 processor(sender, ROOT_NUMBER, reader, mainPowerCheck, batteryProcessor, tempHumidityProcessor, configManager, phoneNumberManager, alertManager, clockManager, otaManager);
-SerialConsole                console(reader, forwarder, batteryProcessor, mainPowerCheck, configManager);
+SerialConsole                console(processor);
 
 void setup()
 {

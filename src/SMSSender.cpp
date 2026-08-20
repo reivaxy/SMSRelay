@@ -1,4 +1,5 @@
 #include "SMSSender.h"
+#include "ConfigManager.h"
 
 String SMSSender::normalizeMojibake(const String &text)
 {
@@ -22,8 +23,8 @@ String SMSSender::normalizeMojibake(const String &text)
     return fixed;
 }
 
-SMSSender::SMSSender(TinyGsm &modem, Stream &serialAT)
-    : _modem(modem), _serialAT(serialAT) {}
+SMSSender::SMSSender(TinyGsm &modem, Stream &serialAT, ConfigManager &configManager)
+    : _modem(modem), _serialAT(serialAT), _configManager(configManager) {}
 
 bool SMSSender::needsUCS2(const String &utf8)
 {
@@ -35,6 +36,18 @@ bool SMSSender::needsUCS2(const String &utf8)
 
 bool SMSSender::send(const String &number, const String &text)
 {
+    // Check if SMS sending is disabled
+    if (_configManager.getInt(ConfigManager::Param::SMS_SEND_DISABLED)) {
+        log_i("[SMS] SMS sending is DISABLED - logging only: to %s", number.c_str());
+        log_i("[SMS] Message (%d chars): %s", text.length(), text.c_str());
+        return true;  // Return true to indicate "success" (message logged but not sent)
+    }
+
+    // Enable extended error reporting before sending any SMS
+    // This ensures we get verbose error codes from all AT commands
+    _modem.sendAT("+CMEE=1");
+    _modem.waitResponse(500);
+    
     String normalized = normalizeMojibake(text);
 
     if (needsUCS2(normalized)) {
@@ -52,7 +65,13 @@ bool SMSSender::sendLongSMS(const String &number, const String &text)
 
     const int SMS_MAX_LEN = 160;
     if ((int)text.length() <= SMS_MAX_LEN) {
-        return _modem.sendSMS(number, text);
+        log_i("[SMS] Sending single SMS (%d chars) to %s", text.length(), number.c_str());
+        if (!_modem.sendSMS(number, text)) {
+            log_e("[ERROR] Failed to send single SMS to %s", number.c_str());
+            logModemError("IRA_SINGLE_SEND_FAIL");
+            return false;
+        }
+        return true;
     }
 
     int offset = 0;
@@ -77,9 +96,10 @@ bool SMSSender::sendLongSMS(const String &number, const String &text)
         String chunk = text.substring(offset, offset + chunkLen);
         chunk.trim();
         partNum++;
-        log_i("[SMS] Sending part %d (%d chars)", partNum, chunk.length());
+        log_i("[SMS] Sending part %d (%d chars) to %s", partNum, chunk.length(), number.c_str());
         if (!_modem.sendSMS(number, chunk)) {
-            log_i("[ERROR] Failed to send part %d", partNum);
+            log_e("[ERROR] Failed to send part %d to %s. Modem error or timeout.", partNum, number.c_str());
+            logModemError("IRA_MODE_SEND_FAIL");
             return false;
         }
 
@@ -96,19 +116,31 @@ bool SMSSender::sendSingleSMS_UCS2(const String &number, const String &hexChunk)
     log_i("[UCS2] PDU mode, pduLen=%d", pduLen);
 
     // Ensure UCS2 charset is set before switching to PDU mode
+    log_i("[UCS2] Setting UCS2 charset and PDU mode for number %s", number.c_str());
     _modem.sendAT("+CSCS=\"UCS2\"");
-    _modem.waitResponse(500);
+    int res_charset = _modem.waitResponse(500);
+    if (res_charset != 1) {
+        log_w("[UCS2] +CSCS=UCS2 returned %d (expected 1)", res_charset);
+        logModemError("CHARSET_SET_FAIL");
+    }
     delay(50);  // Ensure modem has processed charset change
 
     _modem.sendAT(GF("+CMGF=0"));
-    if (_modem.waitResponse(1000) != 1) {
-        log_e("[UCS2] +CMGF=0 failed");
+    int res_cmgf = _modem.waitResponse(1000);
+    if (res_cmgf != 1) {
+        log_e("[UCS2] +CMGF=0 failed with response %d. Switching back to text mode.", res_cmgf);
+        logModemError("PDU_MODE_SET_FAIL");
+        _modem.sendAT(GF("+CMGF=1"));
+        _modem.waitResponse(500);
         return false;
     }
 
     _modem.sendAT(GF("+CMGS="), pduLen);
-    if (_modem.waitResponse(30000L, GF(">")) != 1) {
-        log_e("[UCS2] No > prompt from +CMGS");
+    log_i("[UCS2] Sending +CMGS with pduLen=%d to %s", pduLen, number.c_str());
+    int res_cmgs = _modem.waitResponse(30000L, GF(">"));
+    if (res_cmgs != 1) {
+        log_e("[UCS2] +CMGS failed to get > prompt. Response code: %d. Switching back to text mode.", res_cmgs);
+        logModemError("CMGS_PROMPT_FAIL");
         _modem.sendAT(GF("+CMGF=1"));
         _modem.waitResponse(500);
         return false;
@@ -118,7 +150,16 @@ bool SMSSender::sendSingleSMS_UCS2(const String &number, const String &hexChunk)
     _serialAT.write(static_cast<char>(0x1A));
     _serialAT.flush();
     int res = _modem.waitResponse(60000L);
-    log_i("[UCS2] PDU send result: %d", res);
+    
+    if (res == 1) {
+        log_i("[UCS2] PDU sent successfully to %s", number.c_str());
+    } else if (res == 0) {
+        log_e("[UCS2] PDU send timeout (60s) to %s. Modem may not be responding.", number.c_str());
+        logModemError("PDU_SEND_TIMEOUT");
+    } else {
+        log_e("[UCS2] PDU send failed with error code %d to %s", res, number.c_str());
+        logModemError("PDU_SEND_ERROR");
+    }
 
     // Restore text mode and IRA charset for all other operations
     _modem.sendAT(GF("+CMGF=1"));
@@ -206,9 +247,10 @@ bool SMSSender::sendLongSMS_UCS2(const String &number, const String &hexText)
 
         String chunk = hexText.substring(offset, offset + chunkHex);
         partNum++;
-        log_i("[SMS] Sending UCS2 part %d (%d chars)", partNum, chunkHex / 4);
+        log_i("[SMS] Sending UCS2 part %d (%d chars) to %s", partNum, chunkHex / 4, number.c_str());
         if (!sendSingleSMS_UCS2(number, chunk)) {
-            log_i("[ERROR] Failed to send UCS2 part %d", partNum);
+            log_e("[ERROR] Failed to send UCS2 part %d to %s. Check modem connection and signal.", partNum, number.c_str());
+            logModemError("UCS2_MULTIPART_SEND_FAIL");
             return false;
         }
 
@@ -244,4 +286,26 @@ String SMSSender::utf8ToUCS2Hex(const String &utf8)
         result += buf;
     }
     return result;
+}
+
+void SMSSender::logModemError(const String &context)
+{
+    // Extended error reporting is already enabled at the start of send()
+    // Query signal quality which may indicate connectivity issues
+    _modem.sendAT("+CSQ");
+    int csqRes = _modem.waitResponse(500);
+    if (csqRes == 1) {
+        log_w("[%s] Signal quality check returned response", context.c_str());
+    } else {
+        log_w("[%s] Unable to query signal quality (response: %d)", context.c_str(), csqRes);
+    }
+    
+    // Try to get network registration status
+    _modem.sendAT("+CREG?");
+    int cregRes = _modem.waitResponse(500);
+    if (cregRes == 1) {
+        log_w("[%s] Network registration check returned response", context.c_str());
+    } else {
+        log_w("[%s] Unable to query network registration (response: %d)", context.c_str(), cregRes);
+    }
 }

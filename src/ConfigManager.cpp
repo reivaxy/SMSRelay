@@ -36,6 +36,7 @@ void ConfigManager::init() {
         if (!_prefs.isKey("RESEND_MINS")) _prefs.putInt("RESEND_MINS", Defaults::ALERT_RESEND_DELAY_MINS);
         if (!_prefs.isKey("NTP_RESYNC_HRS")) _prefs.putInt("NTP_RESYNC_HRS", Defaults::NTP_RESYNC_HOURS);
         if (!_prefs.isKey("DST_OFFSET")) _prefs.putInt("DST_OFFSET", Defaults::DST_OFFSET);
+        if (!_prefs.isKey("SMS_DISABLED")) _prefs.putInt("SMS_DISABLED", Defaults::SMS_SEND_DISABLED);
         
         // Clean up any old/stray keys that might interfere
         const char* oldKeys[] = {"ALERT_RESEND_DELAY_MINS", "ALERT_RESEND_MIN", "BAT_ADC_THRESHOLD", "BAT_ADC_NEAR_EMPTY", "POWER_ADC_THRESHOLD"};
@@ -97,6 +98,7 @@ void ConfigManager::resetAllToDefaults() {
     _prefs.putInt("RESEND_MINS", Defaults::ALERT_RESEND_DELAY_MINS);
     _prefs.putInt("NTP_RESYNC_HRS", Defaults::NTP_RESYNC_HOURS);
     _prefs.putInt("DST_OFFSET", Defaults::DST_OFFSET);
+    _prefs.putInt("SMS_DISABLED", Defaults::SMS_SEND_DISABLED);
     log_i("[CONFIG] All parameters reset to defaults");
 }
 
@@ -114,8 +116,9 @@ String ConfigManager::getParamKey(Param param) {
         case Param::ALERT_RESEND_DELAY_MINS: return "RESEND_MINS";
         case Param::WIFI_SSID:               return "WIFI_SSID";
         case Param::WIFI_PASSWORD:           return "WIFI_PASS";
-        case Param::NTP_RESYNC_HOURS: return "NTP_RESYNC_HRS";
-        case Param::DST_OFFSET:      return "DST_OFFSET";
+        case Param::NTP_RESYNC_HOURS:        return "NTP_RESYNC_HRS";
+        case Param::DST_OFFSET:              return "DST_OFFSET";
+        case Param::SMS_SEND_DISABLED:       return "SMS_DISABLED";
     }
     return "UNKNOWN";
 }
@@ -139,12 +142,13 @@ bool ConfigManager::parseParamName(const String &userInput, Param &outParam) {
     else if (input == "WIFI_PWD" || input == "WIFI_PASSWORD") { outParam = Param::WIFI_PASSWORD; return true; }
     else if (input == "NTP_RESYNC_HRS" || input == "NTP_INTERVAL" || input == "NTP_RESYNC_INTERVAL_HOURS") { outParam = Param::NTP_RESYNC_HOURS; return true; }
     else if (input == "DST_OFFSET" || input == "DST_OFFSET_SECONDS") { outParam = Param::DST_OFFSET; return true; }
+    else if (input == "SMS_DISABLED" || input == "SMS_SEND_DISABLED") { outParam = Param::SMS_SEND_DISABLED; return true; }
     
     return false;
 }
 
 String ConfigManager::getValidParamNames() {
-    return "TEMP_HIGH, TEMP_LOW, TEMP_OFFSET, HUMIDITY_HIGH, HUMIDITY_LOW, HUMIDITY_OFFSET, BAT_THRESHOLD, BAT_NEAR_EMPTY, POWER_THRESHOLD, RESEND_MINS, WIFI_SSID, WIFI_PWD, NTP_RESYNC_HRS, DST_OFFSET";
+    return "TEMP_HIGH, TEMP_LOW, TEMP_OFFSET, HUMIDITY_HIGH, HUMIDITY_LOW, HUMIDITY_OFFSET, BAT_THRESHOLD, BAT_NEAR_EMPTY, POWER_THRESHOLD, RESEND_MINS, WIFI_SSID, WIFI_PWD, NTP_RESYNC_HRS, DST_OFFSET, SMS_DISABLED";
 }
 
 String ConfigManager::getParamName(Param param) {
@@ -161,8 +165,9 @@ String ConfigManager::getParamName(Param param) {
         case Param::ALERT_RESEND_DELAY_MINS: return "Alert Resend Delay (min)";
         case Param::WIFI_SSID:               return "WiFi SSID";
         case Param::WIFI_PASSWORD:           return "WiFi Password";
-        case Param::NTP_RESYNC_HOURS: return "NTP Resync Interval (hours)";
-        case Param::DST_OFFSET:      return "DST Offset (seconds)";
+        case Param::NTP_RESYNC_HOURS:        return "NTP Resync Interval (hours)";
+        case Param::DST_OFFSET:              return "DST Offset (seconds)";
+        case Param::SMS_SEND_DISABLED:       return "SMS Send Disabled";
     }
     return "Unknown";
 }
@@ -185,8 +190,9 @@ int ConfigManager::getDefaultIntValue(Param param) {
         case Param::BAT_ADC_NEAR_EMPTY:        return Defaults::BAT_ADC_NEAR_EMPTY;
         case Param::POWER_ADC_THRESHOLD:       return Defaults::POWER_ADC_THRESHOLD;
         case Param::ALERT_RESEND_DELAY_MINS:   return Defaults::ALERT_RESEND_DELAY_MINS;
-        case Param::NTP_RESYNC_HOURS: return Defaults::NTP_RESYNC_HOURS;
-        case Param::DST_OFFSET:        return Defaults::DST_OFFSET;
+        case Param::NTP_RESYNC_HOURS:          return Defaults::NTP_RESYNC_HOURS;
+        case Param::DST_OFFSET:                return Defaults::DST_OFFSET;
+        case Param::SMS_SEND_DISABLED:         return Defaults::SMS_SEND_DISABLED;
         default:                               return 0;
     }
 }
@@ -225,6 +231,9 @@ String ConfigManager::getParamInfo(Param param) {
         float hours = val / 3600.0f;
         return name + ": " + String(hours, 1) + " hours";
     }
+    if (param == Param::SMS_SEND_DISABLED) {
+        return name + ": " + (val ? "YES (disabled)" : "NO (enabled)");
+    }
     return name + ": " + String(val);
 }
 
@@ -243,7 +252,8 @@ String ConfigManager::getAllParams() {
     msg += getParamInfo(Param::WIFI_SSID) + "\n";
     msg += getParamInfo(Param::WIFI_PASSWORD) + "\n";
     msg += getParamInfo(Param::NTP_RESYNC_HOURS) + "\n";
-    msg += getParamInfo(Param::DST_OFFSET);
+    msg += getParamInfo(Param::DST_OFFSET) + "\n";
+    msg += getParamInfo(Param::SMS_SEND_DISABLED);
     return msg;
 }
 

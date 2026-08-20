@@ -372,50 +372,95 @@ void SMSProcessor::handleWriteConfigCommand(const String &rest, const String &se
     bool success = false;
     String confirmMsg;
     
-    // Determine if parameter is float, int, or string and parse accordingly
-    if (param == ConfigManager::Param::TEMP_HIGH || param == ConfigManager::Param::TEMP_LOW ||
-        param == ConfigManager::Param::HUMIDITY_HIGH || param == ConfigManager::Param::HUMIDITY_LOW ||
-        param == ConfigManager::Param::TEMP_OFFSET || param == ConfigManager::Param::HUMIDITY_OFFSET) {
-        // Float parameters
-        float val = valueStr.toFloat();
-        _configManager.setFloat(param, val);
-        
-        if (param == ConfigManager::Param::TEMP_HIGH || param == ConfigManager::Param::TEMP_LOW || param == ConfigManager::Param::TEMP_OFFSET) {
+    // Handle parameter type-specific processing and formatting
+    switch(param) {
+        case ConfigManager::Param::TEMP_HIGH:
+        case ConfigManager::Param::TEMP_LOW:
+        case ConfigManager::Param::TEMP_OFFSET: {
+            // Temperature float parameters (display with °C)
+            float val = valueStr.toFloat();
+            _configManager.setFloat(param, val);
             confirmMsg = "OK: " + ConfigManager::getParamName(param) + " set to " + String(val, 1) + "°C";
-        } else {
-            confirmMsg = "OK: " + ConfigManager::getParamName(param) + " set to " + String(val, 1) + "%";
+            success = true;
+            break;
         }
-        success = true;
-    }
-    else if (param == ConfigManager::Param::BAT_ADC_THRESHOLD || param == ConfigManager::Param::BAT_ADC_NEAR_EMPTY ||
-             param == ConfigManager::Param::POWER_ADC_THRESHOLD || param == ConfigManager::Param::ALERT_RESEND_DELAY_MINS ||
-             param == ConfigManager::Param::NTP_RESYNC_HOURS || param == ConfigManager::Param::DST_OFFSET) {
-        // Int parameters
-        int val = valueStr.toInt();
-        _configManager.setInt(param, val);
         
-        // Readback verification for debugging
-        int readback = _configManager.getInt(param);
-        String paramUserName = ConfigManager::getParamName(param);
-        log_i("[CMD] Set %s to %d, readback: %d", paramUserName.c_str(), val, readback);
+        case ConfigManager::Param::HUMIDITY_HIGH:
+        case ConfigManager::Param::HUMIDITY_LOW:
+        case ConfigManager::Param::HUMIDITY_OFFSET: {
+            // Humidity float parameters (display with %)
+            float val = valueStr.toFloat();
+            _configManager.setFloat(param, val);
+            confirmMsg = "OK: " + ConfigManager::getParamName(param) + " set to " + String(val, 1) + "%";
+            success = true;
+            break;
+        }
         
-        if (param == ConfigManager::Param::ALERT_RESEND_DELAY_MINS) {
+        case ConfigManager::Param::BAT_ADC_THRESHOLD:
+        case ConfigManager::Param::BAT_ADC_NEAR_EMPTY:
+        case ConfigManager::Param::POWER_ADC_THRESHOLD: {
+            // Generic ADC threshold int parameters (no special unit)
+            int val = valueStr.toInt();
+            _configManager.setInt(param, val);
+            
+            int readback = _configManager.getInt(param);
+            String paramUserName = ConfigManager::getParamName(param);
+            log_i("[CMD] Set %s to %d, readback: %d", paramUserName.c_str(), val, readback);
+            
+            if (readback == val) {
+                confirmMsg = "OK: " + paramUserName + " set to " + String(val);
+            } else {
+                confirmMsg = "WARNING: " + paramUserName + " set to " + String(val) + " but readback shows " + String(readback);
+                log_w("[CMD] Mismatch: wrote %d but read %d", val, readback);
+            }
+            success = true;
+            break;
+        }
+        
+        case ConfigManager::Param::ALERT_RESEND_DELAY_MINS: {
+            int val = valueStr.toInt();
+            _configManager.setInt(param, val);
+            
+            int readback = _configManager.getInt(param);
+            String paramUserName = ConfigManager::getParamName(param);
+            log_i("[CMD] Set %s to %d, readback: %d", paramUserName.c_str(), val, readback);
+            
             if (readback == val) {
                 confirmMsg = "OK: " + paramUserName + " set to " + String(val) + " minutes";
             } else {
                 confirmMsg = "WARNING: " + paramUserName + " set to " + String(val) + " but readback shows " + String(readback);
                 log_w("[CMD] Mismatch: wrote %d but read %d", val, readback);
             }
+            success = true;
+            break;
         }
-        else if (param == ConfigManager::Param::NTP_RESYNC_HOURS) {
+        
+        case ConfigManager::Param::NTP_RESYNC_HOURS: {
+            int val = valueStr.toInt();
+            _configManager.setInt(param, val);
+            
+            int readback = _configManager.getInt(param);
+            String paramUserName = ConfigManager::getParamName(param);
+            log_i("[CMD] Set %s to %d, readback: %d", paramUserName.c_str(), val, readback);
+            
             if (readback == val) {
                 confirmMsg = "OK: " + paramUserName + " set to " + String(val) + " hours";
             } else {
                 confirmMsg = "WARNING: " + paramUserName + " set to " + String(val) + " but readback shows " + String(readback);
                 log_w("[CMD] Mismatch: wrote %d but read %d", val, readback);
             }
+            success = true;
+            break;
         }
-        else if (param == ConfigManager::Param::DST_OFFSET) {
+        
+        case ConfigManager::Param::DST_OFFSET: {
+            int val = valueStr.toInt();
+            _configManager.setInt(param, val);
+            
+            int readback = _configManager.getInt(param);
+            String paramUserName = ConfigManager::getParamName(param);
+            log_i("[CMD] Set %s to %d, readback: %d", paramUserName.c_str(), val, readback);
+            
             float hours = val / 3600.0f;
             if (readback == val) {
                 confirmMsg = "OK: " + paramUserName + " set to " + String(hours, 1) + " hours";
@@ -423,23 +468,45 @@ void SMSProcessor::handleWriteConfigCommand(const String &rest, const String &se
                 confirmMsg = "WARNING: " + paramUserName + " set to " + String(hours, 1) + " but readback shows " + String((float)readback / 3600.0f, 1);
                 log_w("[CMD] Mismatch: wrote %d but read %d", val, readback);
             }
+            success = true;
+            break;
         }
-        else {
+        
+        case ConfigManager::Param::SMS_SEND_DISABLED: {
+            int val = valueStr.toInt();
+            _configManager.setInt(param, val);
+            
+            int readback = _configManager.getInt(param);
+            String paramUserName = ConfigManager::getParamName(param);
+            log_i("[CMD] Set %s to %d, readback: %d", paramUserName.c_str(), val, readback);
+            
             if (readback == val) {
-                confirmMsg = "OK: " + paramUserName + " set to " + String(val);
+                String status = val ? "YES (disabled)" : "NO (enabled)";
+                confirmMsg = "OK: " + paramUserName + " set to " + status;
             } else {
                 confirmMsg = "WARNING: " + paramUserName + " set to " + String(val) + " but readback shows " + String(readback);
                 log_w("[CMD] Mismatch: wrote %d but read %d", val, readback);
             }
+            success = true;
+            break;
         }
-        success = true;
-    }
-    else if (param == ConfigManager::Param::WIFI_SSID || param == ConfigManager::Param::WIFI_PASSWORD) {
-        // String parameters (WiFi credentials)
-        _configManager.setStringParam(param, valueStr);
-        log_i("[CMD] Set %s (length: %d)", ConfigManager::getParamName(param).c_str(), valueStr.length());
-        confirmMsg = "OK: " + ConfigManager::getParamName(param) + " set (length: " + String(valueStr.length()) + ")";
-        success = true;
+        
+        case ConfigManager::Param::WIFI_SSID:
+        case ConfigManager::Param::WIFI_PASSWORD: {
+            // String parameters (WiFi credentials)
+            _configManager.setStringParam(param, valueStr);
+            log_i("[CMD] Set %s (length: %d)", ConfigManager::getParamName(param).c_str(), valueStr.length());
+            confirmMsg = "OK: " + ConfigManager::getParamName(param) + " set (length: " + String(valueStr.length()) + ")";
+            success = true;
+            break;
+        }
+        
+        default: {
+            // Unhandled parameter type (shouldn't happen if all params are handled above)
+            log_e("[CMD] Parameter %s not handled by CONFIG write command", ConfigManager::getParamName(param).c_str());
+            _sender.send(senderNumber, "ERROR: Parameter " + ConfigManager::getParamName(param) + " type not supported for CONFIG command");
+            return;
+        }
     }
     
     if (success) {

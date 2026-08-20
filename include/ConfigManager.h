@@ -22,7 +22,8 @@ public:
         WIFI_SSID,               // WiFi network SSID (string)
         WIFI_PASSWORD,           // WiFi network password (string)
         NTP_RESYNC_HOURS,        // NTP time resync interval in hours (int, default 4)
-        DST_OFFSET               // Daylight Saving Time offset in seconds (int, 0 for winter, 3600 for +1hr, 7200 for +2hrs)
+        DST_OFFSET,              // Daylight Saving Time offset in seconds (int, 0 for winter, 3600 for +1hr, 7200 for +2hrs)
+        SMS_SEND_DISABLED        // SMS sending disabled for testing (int 0=enabled, 1=disabled)
     };
 
     // Default values
@@ -39,6 +40,7 @@ public:
         static constexpr int ALERT_RESEND_DELAY_MINS = 5;
         static constexpr int NTP_RESYNC_HOURS = 4;
         static constexpr int DST_OFFSET = 0;  // 0 for winter time, 3600 for +1hr, 7200 for +2hrs
+        static constexpr int SMS_SEND_DISABLED = 0;  // 0=enabled (default), 1=disabled
     };
 
     ConfigManager();

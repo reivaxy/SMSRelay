@@ -37,10 +37,10 @@
 #include "OTAManager.h"
 
 Modem                        modem;
-SMSSender                    sender(modem.getModem(), modem.getSerialStream());
+ConfigManager                configManager;
+SMSSender                    sender(modem.getModem(), modem.getSerialStream(), configManager);
 SMSReader                    reader(modem.getModem(), modem.getSerialStream());
 SMSForwarder                 forwarder(sender, ROOT_NUMBER);
-ConfigManager                configManager;
 PhoneNumberManager           phoneNumberManager(ROOT_NUMBER);
 ClockManager                 clockManager(modem.getModem(), configManager);
 AlertManager                 alertManager(sender, configManager, phoneNumberManager, clockManager);
@@ -84,7 +84,7 @@ void setup()
     #endif
     
     for (const auto &entry : phoneNumberManager.getAllNumbers()) {
-        if (modem.getModem().sendSMS(entry.number, powerOnMsg)) {
+        if (sender.send(entry.number, powerOnMsg)) {
             log_i("[OK] Power-on SMS sent to %s", entry.number.c_str());
         } else {
             log_i("[ERROR] Failed to send power-on SMS to %s", entry.number.c_str());

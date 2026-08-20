@@ -3,9 +3,12 @@
 #include "utilities.h"
 #include <TinyGsmClient.h>
 
+// Forward declaration
+class ConfigManager;
+
 class SMSSender {
 public:
-    SMSSender(TinyGsm &modem, Stream &serialAT);
+    SMSSender(TinyGsm &modem, Stream &serialAT, ConfigManager &configManager);
 
     // Send a UTF-8 message. Automatically selects IRA or UCS-2 path.
     bool send(const String &number, const String &text);
@@ -29,6 +32,10 @@ private:
     // pduLen is set to the byte count to pass to AT+CMGS (excluding SMSC info byte).
     static String buildSMSPDU(const String &number, const String &ucs2hex, int &pduLen);
 
-    TinyGsm &_modem;
-    Stream   &_serialAT;
+    // Query and log the last modem error when SMS send fails
+    void logModemError(const String &context);
+
+    TinyGsm         &_modem;
+    Stream          &_serialAT;
+    ConfigManager   &_configManager;
 };

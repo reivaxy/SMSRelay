@@ -1,18 +1,31 @@
 # SMS relay
 
-This is a preliminary work on an new aquarium monitoring system, and this subsystem is in charge of warning in case of main power failure, in which case the home wifi is no longer available to send alerts.
+This is a preliminary work on an new aquarium monitoring system, and this subsystem is in charge of warning in case 
+of main power failure, in which case the home wifi is no longer available to send alerts.
 
-Years ago I designed an [arduino based device wich was doing that](https://github.com/reivaxy/aquaMonitor) that sent text message for various alerts, including main power outage, and I noticed it would occasionaly receive text messages from the mobile provider that I would never read, so this new device will forward them to your own mobile, and then adds a few features.
+It also monitors room temperature and humidity and can send alerts when configuratble thresholds are reached.
 
-Using a LILYGO T-A7670E R2 board with a nano sim with its own phone number, this program will forward to your phone any SMS it receives, preceded by a message saying what number sent it.
+Other devices, each monitoring one aquarium, will ultimately also use this device to send alerts by SMS (light issue, 
+water level or temperature issue, ...)
+
+Years ago I designed an [arduino based device wich was doing that](https://github.com/reivaxy/aquaMonitor) that sent 
+text message for various alerts, including main power outage, and I noticed it would occasionaly receive text messages 
+from the mobile provider that I would never read, so this new device will forward them to your own mobile, and then 
+adds a few features. This device no longer works since 2G networks have been discontinued
+
+Using a LILYGO T-A7670E R2 board with a nano sim with its own phone number, this program will forward to your phone 
+any SMS it receives, preceded by a message saying what number sent it.
 
 <img width="601" height="610" alt="image" src="https://github.com/user-attachments/assets/b6f5bb17-422f-488b-9362-95136565b258" />
 
-Also, if you send it a message starting by "for:" followed by another number then it will send the rest of the message to that number, which will then appear to have been sent by this device and not your phone.
+Also, if you send it a message starting by "for:" followed by another number then it will send the rest of the message 
+to that number, which will then appear to have been sent by this device and not your phone.
 
 But this only works for messages sent from *your* phone, to avoid other people sending messages.
 
-This allows you to not miss any message in case your SMS enabled home automation system gets an unexpected message (from the provider, or because you are repurposing an old SIM card, or whatever mischief you are about to commit), and you can answer from your phone as if it were from the number it was sent to.
+This allows you to not miss any message in case your SMS enabled home automation system gets an unexpected message 
+(from the provider, or because you are repurposing an old SIM card, or whatever mischief you are about to commit), 
+and you can answer from your phone as if it were from the number it was sent to.
 
 <img width="640" alt="20260704_224349" src="https://github.com/user-attachments/assets/f83f52b9-f4e3-4f4d-83e1-af1621c59c79" />
 
@@ -23,24 +36,33 @@ This allows you to not miss any message in case your SMS enabled home automation
 ## Features
 
 ### Environmental Monitoring
-- **Temperature/Humidity Monitoring**: Continuous monitoring of temperature and humidity levels with configurable high/low thresholds. Alerts are sent when values exceed configured limits
+- **Temperature/Humidity Monitoring**: Continuous monitoring of temperature and humidity levels with configurable 
+high/low thresholds. Alerts are sent when values exceed configured limits
 - **Battery Monitoring**: Tracks battery voltage/charge levels with alerts for low battery and near-empty states
-- **Main Power Detection**: Detects main AC power failures and alerts all authorized numbers when the device loses mains power
+- **Main Power Detection**: Detects main AC power failures and alerts all authorized numbers when the device loses
+ mains power
 
 ### Alert System
 - **Alert Codes**: Each alert is assigned a unique 3-digit code (000-999) for easy reference
-- **Alert Acknowledgment**: Authorized users can acknowledge alerts by sending `ACK <code>`. When one user acknowledges, all others receive a notification
-- **Alert Muting**: Mute specific phone numbers to prevent them from receiving alerts while still allowing them to send commands
-- **Automatic Resending**: Alerts automatically resend at configurable intervals (default: 5 minutes) until acknowledged by all authorized users
+- **Alert Acknowledgment**: Authorized users can acknowledge alerts by sending `ACK <code>`. When one user 
+acknowledges, all others receive a notification
+- **Alert Muting**: Mute specific phone numbers to prevent them from receiving alerts while still allowing 
+them to send commands
+- **Automatic Resending**: Alerts automatically resend at configurable intervals (default: 5 minutes) until 
+acknowledged by all authorized users
 - **Alert Clearing**: Alerts can be manually cleared.
 
 ### SMS Forwarding
-- **Automatic Forwarding**: All non-command incoming SMS messages are automatically forwarded to "root"" phone number, preceded by the sender's number
-- **Message Relay**: Forward any message to another number by starting your SMS with `FOR:<number> <message>`. The message will be sent from the device's phone number, not your own. This only works from authorized admin number.
+- **Automatic Forwarding**: All non-command incoming SMS messages are automatically forwarded to "root"" phone
+ number, preceded by the sender's number
+- **Message Relay**: Forward any message to another number by starting your SMS with `FOR:<number> <message>`.
+ The message will be sent from the device's phone number, not your own. This only works from authorized admin
+  number.
 
 ### Configuration Management
 - **Persistent Settings**: All configuration parameters are stored in flash memory and survive power cycles
-- **Configurable Thresholds**: Adjust and read temperature, humidity, battery, and power detection thresholds via SMS
+- **Configurable Thresholds**: Adjust and read temperature, humidity, battery, and power detection thresholds
+ via SMS
 - **Parameter Storage**: Settings include:
   - Temperature thresholds (TEMP_HIGH, TEMP_LOW, TEMP_OFFSET)
   - Humidity thresholds (HUMIDITY_HIGH, HUMIDITY_LOW), HUMIDITY_OFFSET
@@ -50,17 +72,13 @@ This allows you to not miss any message in case your SMS enabled home automation
 
 ### Phone Number Management
 - **Authorized Numbers**: Manage a list of authorized phone numbers with different permission levels
-- **Admin vs Read Permissions**: Restrict sensitive commands to admin-only users while allowing others to view status
+- **Admin vs Read Permissions**: Restrict sensitive commands to admin-only users while allowing others to
+ view status
 - **Aliases**: Assign human-readable aliases to phone numbers for easier identification
 - **Mute Control**: Admin users can mute/unmute any authorized number
 
 ### Serial Console Commands
-Access the device directly via serial monitor with commands like:
-- `list` - List all stored SMS messages
-- `read X` - Read a specific SMS by index
-- `delete X` - Delete an SMS by index
-- `forward X` - Forward an SMS to the configured target
-- `status` - Display battery and power levels
+Serial console now accepts all the messages that can be sent by SMS, it has ROOT privileges.
 
 ## SMS Commands
 
@@ -72,7 +90,10 @@ Access the device directly via serial monitor with commands like:
 - **`CLEAR`** - Clear all pending alerts
 - **`ACK <code>`** - Acknowledge an alert by its 3-digit code
 - **`CONFIG`** - View all current configuration parameters and their values
-- **`HELP`** - Display available commands
+- **`HELP`** - Display available commands as well as config parameters
+- **`MUTE ME`** - No longer send message to my number
+- **`UNMUTE ME`** - Resume sending message to my number
+
 
 ### Admin-Only Commands
 
@@ -103,3 +124,19 @@ Access the device directly via serial monitor with commands like:
     - `CONFIG TEMP_HIGH 28.5` - Set maximum temperature threshold
     - `CONFIG BAT_THRESHOLD 2400` - Set battery warning level
     - `CONFIG RESEND_MINS 10` - Set alert resend interval to 10 minutes
+
+#### System Management
+- **`OTA`** - Initiate Over-The-Air (OTA) firmware update mode
+  - Connects to configured WiFi and starts a web server
+  - Sends you the upload URL via SMS
+  - Allows uploading new firmware without serial connection
+  - Cannot be initiated if there are pending unacknowledged alerts
+  
+- **`RESTART`** - Restart the device
+  
+- **`WEB <ON|OFF>`** - Control the web configuration interface
+  - **`WEB ON`** - Start web server for configuration via browser
+    - Connects to home WiFi and sends you the access URL via SMS
+    - Provides a secure web form to adjust all configuration parameters
+  - **`WEB OFF`** - Stop the web server and disconnect from WiFi
+

@@ -68,7 +68,7 @@ private:
     void handleACKCommand(const String &rest, const String &senderNumber);
     void handleOTACommand(const String &senderNumber);
     void handleWebCommand(const String &rest, const String &senderNumber);
-    void handleResetCommand(const String &senderNumber);
+    void handleRestartCommand(const String &senderNumber);
     
     // Check if sender has required permission level
     bool hasPermission(const String &senderNumber, PhoneNumberManager::Permission required);

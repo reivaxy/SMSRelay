@@ -138,12 +138,12 @@ void SMSProcessor::process(const ReceivedSMS &sms)
         }
         handleOTACommand(sms.number);
     }
-    else if (textUpper == "RESET") {
+    else if (textUpper == "RESTART") {
         if (!hasPermission(sms.number, PhoneNumberManager::Permission::ADMIN)) {
             sendPermissionDenied(sms.number);
             return;
         }
-        handleResetCommand(sms.number);
+        handleRestartCommand(sms.number);
     }
     else if (textUpper.startsWith("WEB ")) {
         if (!hasPermission(sms.number, PhoneNumberManager::Permission::ADMIN)) {
@@ -827,10 +827,10 @@ void SMSProcessor::handleOTACommand(const String &senderNumber) {
     }
 }
 
-void SMSProcessor::handleResetCommand(const String &senderNumber) {
-    log_i("[CMD] RESET command received from %s", senderNumber.c_str());
+void SMSProcessor::handleRestartCommand(const String &senderNumber) {
+    log_i("[CMD] RESTART command received from %s", senderNumber.c_str());
     
-    // Send confirmation message
+    // Send acknowledgment message
     _sender.send(senderNumber, "OK: Device restarting...");
     
     // Give the modem time to send the message before restarting

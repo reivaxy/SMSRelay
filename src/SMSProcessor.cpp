@@ -66,17 +66,9 @@ void SMSProcessor::process(const ReceivedSMS &sms)
         handleRemovePhoneCommand(sms.text.substring(12), sms.number);
     }
     else if (textUpper.startsWith("MUTE ")) {
-        if (!hasPermission(sms.number, PhoneNumberManager::Permission::ADMIN)) {
-            sendPermissionDenied(sms.number);
-            return;
-        }
         handleMuteCommand(sms.text.substring(5), sms.number);
     }
     else if (textUpper.startsWith("UNMUTE ")) {
-        if (!hasPermission(sms.number, PhoneNumberManager::Permission::ADMIN)) {
-            sendPermissionDenied(sms.number);
-            return;
-        }
         handleUnmuteCommand(sms.text.substring(7), sms.number);
     }
     else if (textUpper.startsWith("FOR:")) {
@@ -658,42 +650,51 @@ void SMSProcessor::handleHelpCommand(const String &senderNumber) {
     log_i("[CMD] Help command received");
     
     auto perm = _phoneNumberManager.getPermission(senderNumber);
-    String helpMsg = "Available Commands:\n\n";
     
-    // Commands accessible to both READ and ADMIN
-    helpMsg += "STATUS - Device status\n";
-    helpMsg += "LEVELS - Sensor levels\n";
-    helpMsg += "CONFIG - View params\n";
-    helpMsg += "LISTPHONES - List phones\n";
-    helpMsg += "LISTALERTS - List pending alerts\n";
-    helpMsg += "CLEAR - Reset alerts\n";
-    helpMsg += "ACK <code> - Acknowledge alert\n";
+    // CONSOLE (serial console) always gets ADMIN help
+    bool isAdmin = (senderNumber == "CONSOLE") || (perm == PhoneNumberManager::Permission::ADMIN);
     
-    // Admin-only commands
-    if (perm == PhoneNumberManager::Permission::ADMIN) {
-        helpMsg += "\nADMIN:\n";
-        helpMsg += "LIST - List messages\n";
-        helpMsg += "READ <i> - Read msg i\n";
-        helpMsg += "DELETE <i> - Delete msg i\n";
-        helpMsg += "FOR:<num> <msg> - Forward\n";
-        helpMsg += "CONFIG <p> <v> - Set param\n";
-        helpMsg += "ADDPHONE <n><p>[a] - Add\n";
-        helpMsg += "REMOVEPHONE <i|n> - Remove\n";
-        helpMsg += "MUTE <i|n|me> - Mute alerts\n";
-        helpMsg += "UNMUTE <i|n|me> - Unmute alerts\n";
-        helpMsg += "WEB ON|OFF - Web config\n";
-        helpMsg += "OTA - Firmware update\n";
-        helpMsg += "RESET - Restart device\n";
-        helpMsg += "\nLegend:\n";
-        helpMsg += "<i|n>=index/number\n";
-        helpMsg += "<p>=admin|read\n";
-        helpMsg += "[a]=opt alias";
+    // Build help message in parts for console output
+    String helpMsg1 = "Available Commands:\n\n";
+    helpMsg1 += "STATUS - Device status\n";
+    helpMsg1 += "LEVELS - Sensor levels\n";
+    helpMsg1 += "CONFIG - View params\n";
+    helpMsg1 += "LISTPHONES - List phones\n";
+    helpMsg1 += "LISTALERTS - List pending alerts\n";
+    helpMsg1 += "CLEAR - Reset alerts\n";
+    helpMsg1 += "ACK <code> - Acknowledge alert\n";
+    helpMsg1 += "MUTE me - Mute your alerts\n";
+    helpMsg1 += "UNMUTE me - Unmute your alerts\n";
+    
+    _sender.send(senderNumber, helpMsg1);
+    
+    if (isAdmin) {
+        String helpMsg2 = "\nADMIN Commands:\n";
+        helpMsg2 += "LIST - List messages\n";
+        helpMsg2 += "READ <i> - Read msg i\n";
+        helpMsg2 += "DELETE <i> - Delete msg i\n";
+        helpMsg2 += "FOR:<num> <msg> - Forward\n";
+        helpMsg2 += "CONFIG <p> <v> - Set param\n";
+        helpMsg2 += "ADDPHONE <n><p>[a] - Add\n";
+        helpMsg2 += "REMOVEPHONE <i|n> - Remove\n";
+        helpMsg2 += "MUTE <i|n|me> - Mute alerts (any)\n";
+        helpMsg2 += "UNMUTE <i|n|me> - Unmute alerts (any)\n";
+        helpMsg2 += "WEB ON|OFF - Web config\n";
+        helpMsg2 += "OTA - Firmware update\n";
+        helpMsg2 += "RESTART - Restart device\n";
         
-        helpMsg += "\n\nParams: " + ConfigManager::getValidParamNames();
+        _sender.send(senderNumber, helpMsg2);
+        
+        String helpMsg3 = "\nLegend:\n";
+        helpMsg3 += "<i|n>=index/number\n";
+        helpMsg3 += "<p>=admin|read\n";
+        helpMsg3 += "[a]=optional alias\n\n";
+        helpMsg3 += "Parameters:\n" + ConfigManager::getValidParamNames();
+        
+        _sender.send(senderNumber, helpMsg3);
     }
     
     log_i("[CMD] Help displayed");
-    _sender.send(senderNumber, helpMsg);
 }
 
 void SMSProcessor::handleMuteCommand(const String &rest, const String &senderNumber) {
@@ -710,6 +711,14 @@ void SMSProcessor::handleMuteCommand(const String &rest, const String &senderNum
     if (param == "ME") {
         param = senderNumber;
         log_i("[CMD] MUTE command using 'me', resolved to: %s", param.c_str());
+    }
+    
+    // Check if non-admin user is trying to mute someone other than themselves
+    if (!hasPermission(senderNumber, PhoneNumberManager::Permission::ADMIN)) {
+        if (param != senderNumber) {
+            sendPermissionDenied(senderNumber);
+            return;
+        }
     }
     
     if (_phoneNumberManager.muteNumber(param)) {
@@ -735,6 +744,14 @@ void SMSProcessor::handleUnmuteCommand(const String &rest, const String &senderN
     if (param == "ME") {
         param = senderNumber;
         log_i("[CMD] UNMUTE command using 'me', resolved to: %s", param.c_str());
+    }
+    
+    // Check if non-admin user is trying to unmute someone other than themselves
+    if (!hasPermission(senderNumber, PhoneNumberManager::Permission::ADMIN)) {
+        if (param != senderNumber) {
+            sendPermissionDenied(senderNumber);
+            return;
+        }
     }
     
     if (_phoneNumberManager.unmuteNumber(param)) {

@@ -3,6 +3,7 @@
 #include "SMSSender.h"
 #include "PhoneNumberManager.h"
 #include <ESPmDNS.h>
+#include <ctime>
 
 WebManager::WebManager(ConfigManager &configManager, SMSSender &sender, PhoneNumberManager &phoneNumberManager)
     : _server(nullptr), _configManager(configManager), _sender(sender), _phoneNumberManager(phoneNumberManager),
@@ -389,6 +390,17 @@ String WebManager::generateHTMLForm() {
     html += "</head>\n<body>\n";
     html += "    <div class=\"container\">\n";
     html += "        <h1>Configuration</h1>\n";
+    
+    // Display current date/time with DST offset
+    time_t now = time(nullptr);
+    int dstOffset = _configManager.getInt(ConfigManager::Param::DST_OFFSET);
+    time_t adjustedTime = now + dstOffset;
+    struct tm* timeinfo = localtime(&adjustedTime);
+    char dateBuffer[64];
+    strftime(dateBuffer, sizeof(dateBuffer), "%Y-%m-%d %H:%M:%S", timeinfo);
+    html += "        <div style=\"text-align: center; font-size: 12px; color: #666; margin-bottom: 10px;\">\n";
+    html += "            Device Date/Time: " + String(dateBuffer) + "\n";
+    html += "        </div>\n";
     html += "        <form id=\"configForm\">\n";
 
     // Temperature section

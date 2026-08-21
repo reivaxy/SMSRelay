@@ -38,7 +38,19 @@ bool SMSSender::send(const String &number, const String &text)
 {
     // Special case: CONSOLE sender should print to Serial, not send SMS
     if (number == "CONSOLE") {
-        Serial.println(text);
+        // Print line-by-line to avoid serial buffer overflow
+        int startIdx = 0;
+        int endIdx = text.indexOf('\n');
+        
+        while (endIdx != -1) {
+            Serial.println(text.substring(startIdx, endIdx));
+            startIdx = endIdx + 1;
+            endIdx = text.indexOf('\n', startIdx);
+        }
+        // Print the last line if any
+        if (startIdx < text.length()) {
+            Serial.println(text.substring(startIdx));
+        }
         return true;
     }
 

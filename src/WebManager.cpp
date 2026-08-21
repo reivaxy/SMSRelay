@@ -7,7 +7,7 @@
 
 WebManager::WebManager(ConfigManager &configManager, SMSSender &sender, PhoneNumberManager &phoneNumberManager)
     : _server(nullptr), _configManager(configManager), _sender(sender), _phoneNumberManager(phoneNumberManager),
-      _isRunning(false), _requesterNumber(""), _serverURL("") {}
+      _isRunning(false), _requesterNumber(""), _serverURL(""), _accessToken("") {}
 
 WebManager::~WebManager() {
     stop();
@@ -58,6 +58,10 @@ bool WebManager::init(const String &requesterNumber) {
     }
     log_i("[WEB] mDNS started as smsrelay.local");
 
+    // Generate random access token
+    _accessToken = generateRandomToken();
+    log_i("[WEB] Generated access token: %s", _accessToken.c_str());
+
     // Create web server on port 80
     _server = new WiFiServer(80);
     _server->begin();
@@ -66,13 +70,13 @@ bool WebManager::init(const String &requesterNumber) {
     // Add mDNS service for HTTP
     MDNS.addService("http", "tcp", 80);
 
-    // Build server URL using mDNS hostname
-    _serverURL = "http://smsrelay.local/";
-    String ipURL = "http://" + WiFi.localIP().toString() + "/";
+    // Build server URLs with access token
+    String ipURL = "http://" + WiFi.localIP().toString() + "/" + _accessToken + "/";
+    _serverURL = "http://smsrelay.local/" + _accessToken + "/";
     log_i("[WEB] Web server started at: %s (also accessible via IP: %s)", _serverURL.c_str(), ipURL.c_str());
 
     // Send both URLs to requester
-    _sender.send(requesterNumber, "OK: Web interface started\nhttp://smsrelay.local/\nor\n" + ipURL);
+    _sender.send(requesterNumber, "OK: Web interface started\n" + _serverURL + "\nor\n" + ipURL);
 
     return true;
 }
@@ -143,8 +147,29 @@ void WebManager::handleClient(WiFiClient client) {
 
     log_i("[WEB] %s %s", method.c_str(), path.c_str());
 
+    // Check if path contains the access token
+    if (!path.startsWith("/" + _accessToken)) {
+        log_w("[WEB] Access denied - invalid token in path: %s", path.c_str());
+        String notFound = "403 Forbidden";
+        client.println("HTTP/1.1 403 Forbidden");
+        client.println("Content-Type: text/plain");
+        client.println("Content-Length: " + String(notFound.length()));
+        client.println("Connection: close");
+        client.println();
+        client.println(notFound);
+        delay(100);
+        client.stop();
+        return;
+    }
+
+    // Remove token prefix from path for routing
+    String routePath = path.substring(("/" + _accessToken).length());
+    if (routePath.length() == 0 || routePath == "/") {
+        routePath = "/";
+    }
+
     // Handle GET /
-    if (method == "GET" && (path == "/" || path == "")) {
+    if (method == "GET" && (routePath == "/" || routePath == "")) {
         String html = generateHTMLForm();
         
         client.println("HTTP/1.1 200 OK");
@@ -155,7 +180,7 @@ void WebManager::handleClient(WiFiClient client) {
         client.println(html);
     }
     // Handle POST /api/config
-    else if (method == "POST" && path == "/api/config") {
+    else if (method == "POST" && routePath == "/api/config") {
         // Read POST body
         String postBody = "";
         unsigned long bodyTimeout = millis() + 1000;
@@ -176,7 +201,7 @@ void WebManager::handleClient(WiFiClient client) {
         client.println(response);
     }
     // Handle POST /api/restart
-    else if (method == "POST" && path == "/api/restart") {
+    else if (method == "POST" && routePath == "/api/restart") {
         log_i("[WEB] Restart request received");
         String response = "{\"status\":\"ok\",\"message\":\"Device restarting\"}";
         
@@ -196,7 +221,7 @@ void WebManager::handleClient(WiFiClient client) {
         return;
     }
     // Handle POST /api/weboff
-    else if (method == "POST" && path == "/api/weboff") {
+    else if (method == "POST" && routePath == "/api/weboff") {
         log_i("[WEB] Web off request received");
         String response = "{\"status\":\"ok\",\"message\":\"Web server stopping\"}";
         
@@ -401,7 +426,8 @@ String WebManager::generateHTMLForm() {
     html += "        <div style=\"text-align: center; font-size: 12px; color: #666; margin-bottom: 10px;\">\n";
     html += "            Device Date/Time: " + String(dateBuffer) + "\n";
     html += "        </div>\n";
-    html += "        <form id=\"configForm\">\n";
+    html += "        <form id=\"configForm\" data-token=\"" + _accessToken + "\">\n";
+    html += "        <script>const ACCESS_TOKEN = '" + _accessToken + "';</script>\n";
 
     // Temperature section
     html += "            <div class=\"section\">\n";
@@ -507,7 +533,7 @@ String WebManager::generateHTMLForm() {
     html += "                if (value) params.append(key, value);\n";
     html += "            }\n";
     html += "            try {\n";
-    html += "                const response = await fetch('/api/config', {\n";
+    html += "                const response = await fetch('/' + ACCESS_TOKEN + '/api/config', {\n";
     html += "                    method: 'POST',\n";
     html += "                    body: params.toString(),\n";
     html += "                    headers: {'Content-Type': 'application/x-www-form-urlencoded'}\n";
@@ -535,7 +561,7 @@ String WebManager::generateHTMLForm() {
     html += "        document.getElementById('restartBtn').addEventListener('click', async function() {\n";
     html += "            if (!confirm('Restart the device?')) return;\n";
     html += "            try {\n";
-    html += "                const response = await fetch('/api/restart', { method: 'POST' });\n";
+    html += "                const response = await fetch('/' + ACCESS_TOKEN + '/api/restart', { method: 'POST' });\n";
     html += "                const text = await response.text();\n";
     html += "                const result = JSON.parse(text);\n";
     html += "                const statusDiv = document.getElementById('status');\n";
@@ -560,7 +586,7 @@ String WebManager::generateHTMLForm() {
     html += "        document.getElementById('weboffBtn').addEventListener('click', async function() {\n";
     html += "            if (!confirm('Stop web server?')) return;\n";
     html += "            try {\n";
-    html += "                const response = await fetch('/api/weboff', { method: 'POST' });\n";
+    html += "                const response = await fetch('/' + ACCESS_TOKEN + '/api/weboff', { method: 'POST' });\n";
     html += "                const text = await response.text();\n";
     html += "                const result = JSON.parse(text);\n";
     html += "                const statusDiv = document.getElementById('status');\n";
@@ -585,5 +611,17 @@ String WebManager::generateHTMLForm() {
     html += "</body>\n</html>\n";
 
     return html;
+}
+
+String WebManager::generateRandomToken() {
+    const char charset[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    String token = "";
+    
+    for (int i = 0; i < 10; i++) {
+        int index = random(0, sizeof(charset) - 1);
+        token += charset[index];
+    }
+    
+    return token;
 }
 

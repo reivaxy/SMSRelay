@@ -39,6 +39,9 @@ private:
 
     // Handle form submission to update parameters
     String handleFormSubmit(const String &postData);
+    
+    // Generate a random 10-character alphanumeric token
+    String generateRandomToken();
 
     WiFiServer              *_server;
     ConfigManager           &_configManager;
@@ -47,5 +50,6 @@ private:
     bool                     _isRunning;
     String                   _requesterNumber;
     String                   _serverURL;
+    String                   _accessToken;
 };
 

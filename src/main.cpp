@@ -35,6 +35,7 @@
 #include "ClockManager.h"
 #include "AlertManager.h"
 #include "OTAManager.h"
+#include "WebManager.h"
 
 Modem                        modem;
 ConfigManager                configManager;
@@ -48,7 +49,8 @@ BatteryProcessor             batteryProcessor(sender, ROOT_NUMBER, configManager
 MainPowerCheck               mainPowerCheck(sender, ROOT_NUMBER, configManager, phoneNumberManager, alertManager);
 TemperatureHumidityProcessor tempHumidityProcessor(sender, ROOT_NUMBER, BOARD_DHT_PIN, configManager, phoneNumberManager, alertManager);
 OTAManager                   otaManager(sender, ROOT_NUMBER, configManager, phoneNumberManager, alertManager, mainPowerCheck);
-SMSProcessor                 processor(sender, ROOT_NUMBER, reader, mainPowerCheck, batteryProcessor, tempHumidityProcessor, configManager, phoneNumberManager, alertManager, clockManager, otaManager);
+WebManager                   webManager(configManager, sender, phoneNumberManager);
+SMSProcessor                 processor(sender, ROOT_NUMBER, reader, mainPowerCheck, batteryProcessor, tempHumidityProcessor, configManager, phoneNumberManager, alertManager, clockManager, otaManager, webManager);
 SerialConsole                console(processor);
 
 void setup()
@@ -129,6 +131,9 @@ void loop()
 
     // Check OTA web server if active
     otaManager.check();
+
+    // Check web configuration server if active
+    webManager.check();
 
     delay(100);
 }

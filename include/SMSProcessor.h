@@ -12,6 +12,7 @@ class ConfigManager;
 class AlertManager;
 class ClockManager;
 class OTAManager;
+class WebManager;
 
 // Handles command SMS received from authorized phone numbers.
 // Supported commands:
@@ -40,7 +41,7 @@ public:
     SMSProcessor(SMSSender &sender, const String &targetNumber, SMSReader &reader, 
                  MainPowerCheck &mainPowerCheck, BatteryProcessor &batteryProcessor, TemperatureHumidityProcessor &tempHumidityProcessor,
                  ConfigManager &configManager, PhoneNumberManager &phoneNumberManager, AlertManager &alertManager, ClockManager &clockManager,
-                 OTAManager &otaManager);
+                 OTAManager &otaManager, WebManager &webManager);
 
     // Processes a command SMS. The original SMS is always considered handled
     // (caller should delete it regardless of individual command success).
@@ -66,6 +67,7 @@ private:
     void handleUnmuteCommand(const String &rest, const String &senderNumber);
     void handleACKCommand(const String &rest, const String &senderNumber);
     void handleOTACommand(const String &senderNumber);
+    void handleWebCommand(const String &rest, const String &senderNumber);
     void handleResetCommand(const String &senderNumber);
     
     // Check if sender has required permission level
@@ -85,4 +87,5 @@ private:
     AlertManager                     &_alertManager;
     ClockManager                     &_clockManager;
     OTAManager                       &_otaManager;
+    WebManager                       &_webManager;
 };

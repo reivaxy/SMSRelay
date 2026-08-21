@@ -6,16 +6,17 @@
 #include "AlertManager.h"
 #include "ClockManager.h"
 #include "OTAManager.h"
+#include "WebManager.h"
 #include "utilities.h"
 
 SMSProcessor::SMSProcessor(SMSSender &sender, const String &targetNumber, SMSReader &reader, 
                            MainPowerCheck &mainPowerCheck, BatteryProcessor &batteryProcessor, TemperatureHumidityProcessor &tempHumidityProcessor,
                            ConfigManager &configManager, PhoneNumberManager &phoneNumberManager, AlertManager &alertManager, ClockManager &clockManager,
-                           OTAManager &otaManager)
+                           OTAManager &otaManager, WebManager &webManager)
     : _sender(sender), _targetNumber(targetNumber), _reader(reader), _mainPowerCheck(mainPowerCheck),
       _batteryProcessor(batteryProcessor), _tempHumidityProcessor(tempHumidityProcessor), 
       _configManager(configManager), _phoneNumberManager(phoneNumberManager), _alertManager(alertManager), _clockManager(clockManager),
-      _otaManager(otaManager) {}
+      _otaManager(otaManager), _webManager(webManager) {}
 
 void SMSProcessor::process(const ReceivedSMS &sms)
 {
@@ -151,6 +152,13 @@ void SMSProcessor::process(const ReceivedSMS &sms)
             return;
         }
         handleResetCommand(sms.number);
+    }
+    else if (textUpper.startsWith("WEB ")) {
+        if (!hasPermission(sms.number, PhoneNumberManager::Permission::ADMIN)) {
+            sendPermissionDenied(sms.number);
+            return;
+        }
+        handleWebCommand(sms.text.substring(4), sms.number);
     }
     else if (textUpper.startsWith("ACK ")) {
         handleACKCommand(sms.text.substring(4), sms.number);
@@ -673,6 +681,7 @@ void SMSProcessor::handleHelpCommand(const String &senderNumber) {
         helpMsg += "REMOVEPHONE <i|n> - Remove\n";
         helpMsg += "MUTE <i|n|me> - Mute alerts\n";
         helpMsg += "UNMUTE <i|n|me> - Unmute alerts\n";
+        helpMsg += "WEB ON|OFF - Web config\n";
         helpMsg += "OTA - Firmware update\n";
         helpMsg += "RESET - Restart device\n";
         helpMsg += "\nLegend:\n";
@@ -813,5 +822,38 @@ void SMSProcessor::handleResetCommand(const String &senderNumber) {
     log_i("[CMD] Executing device restart");
     ESP.restart();
 }
+
+void SMSProcessor::handleWebCommand(const String &rest, const String &senderNumber) {
+    String param = rest;
+    param.trim();
+    param.toUpperCase();
+
+    log_i("[CMD] WEB command received from %s: %s", senderNumber.c_str(), param.c_str());
+
+    if (param == "ON") {
+        if (_webManager.isRunning()) {
+            _sender.send(senderNumber, "ERROR: Web server is already running");
+            return;
+        }
+        if (_webManager.init(senderNumber)) {
+            log_i("[OK] Web interface started");
+        } else {
+            log_e("[ERROR] Failed to start web interface");
+        }
+    } 
+    else if (param == "OFF") {
+        if (!_webManager.isRunning()) {
+            _sender.send(senderNumber, "ERROR: Web server is not running");
+            return;
+        }
+        _webManager.stop();
+        log_i("[OK] Web interface stopped");
+        _sender.send(senderNumber, "OK: Web interface stopped");
+    } 
+    else {
+        _sender.send(senderNumber, "ERROR: WEB syntax: WEB ON|OFF");
+    }
+}
+
 
 

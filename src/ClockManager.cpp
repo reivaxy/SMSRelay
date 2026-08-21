@@ -12,7 +12,7 @@ const char* ClockManager::NTP_SERVER3 = "time.google.com";
 
 ClockManager::ClockManager(TinyGsm &modem, ConfigManager &configManager)
     : _modem(modem), _configManager(configManager), _initialized(false), 
-      _epochTime(0), _millisecondsAtSync(0), _lastNtpSyncTime(0), 
+      _syncSource(SYNC_NONE), _epochTime(0), _millisecondsAtSync(0), _lastNtpSyncTime(0), 
       _ntpResyncIntervalMs(4 * 60 * 60 * 1000), _tzOffsetSec(0) {
     log_i("[CLOCK] ClockManager initialized");
 }
@@ -33,24 +33,27 @@ bool ClockManager::init() {
         _tzOffsetSec = 0;
     }
     
-    // Try NTP first (primary method)
-    if (syncWithNTP()) {
-        _initialized = true;
-        log_i("[CLOCK] Clock initialized successfully from NTP: %s", 
-              getFormattedDateTime().c_str());
-        return true;
-    }
-    
-    // Fall back to mobile network time
-    log_w("[CLOCK] NTP failed, attempting mobile network time...");
+    // Try mobile network time first (fastest, already connected)
+    log_i("[CLOCK] Attempting to sync time from mobile network...");
     if (syncWithMobileNetwork()) {
+        _syncSource = SYNC_MOBILE;
         _initialized = true;
         log_i("[CLOCK] Clock initialized from mobile network: %s", 
               getFormattedDateTime().c_str());
         return true;
     }
     
-    log_e("[CLOCK] Failed to initialize clock from both NTP and mobile network");
+    // Fall back to NTP (requires WiFi but more reliable)
+    log_w("[CLOCK] Mobile network time failed, attempting NTP...");
+    if (syncWithNTP()) {
+        _syncSource = SYNC_NTP;
+        _initialized = true;
+        log_i("[CLOCK] Clock initialized successfully from NTP: %s", 
+              getFormattedDateTime().c_str());
+        return true;
+    }
+    
+    log_e("[CLOCK] Failed to initialize clock from both mobile network and NTP");
     return false;
 }
 
@@ -229,17 +232,25 @@ unsigned long ClockManager::calculateCurrentTime() {
     unsigned long elapsedMs = millis() - _millisecondsAtSync;
     unsigned long elapsedSeconds = elapsedMs / 1000;
     
-    // Get current UTC time (stored at sync)
-    unsigned long utcTime = _epochTime + elapsedSeconds;
+    // Base time depends on sync source
+    unsigned long currentTime = _epochTime + elapsedSeconds;
     
-    // Apply timezone offset (always)
-    long localTime = (long)utcTime + _tzOffsetSec;
+    if (_syncSource == SYNC_NTP) {
+        // NTP provides UTC time, apply timezone and DST offsets
+        long localTime = (long)currentTime + _tzOffsetSec;
+        
+        // Apply DST offset dynamically (so changes take effect immediately)
+        int dstOffsetSec = _configManager.getInt(ConfigManager::Param::DST_OFFSET);
+        localTime += dstOffsetSec;
+        
+        return (unsigned long)localTime;
+    } else if (_syncSource == SYNC_MOBILE) {
+        // Mobile network provides local time (DST already included)
+        // No need to apply timezone or DST offsets
+        return currentTime;
+    }
     
-    // Apply DST offset dynamically (so changes take effect immediately)
-    int dstOffsetSec = _configManager.getInt(ConfigManager::Param::DST_OFFSET);
-    localTime += dstOffsetSec;
-    
-    return (unsigned long)localTime;
+    return 0; // Should not reach here
 }
 
 unsigned long ClockManager::getCurrentTime() {
@@ -333,10 +344,12 @@ void ClockManager::check() {
         }
         
         if (syncWithNTP()) {
+            _syncSource = SYNC_NTP;
             log_i("[CLOCK] Successfully resynchronized with NTP");
         } else {
             log_w("[CLOCK] NTP resync failed, attempting mobile network fallback...");
             if (syncWithMobileNetwork()) {
+                _syncSource = SYNC_MOBILE;
                 log_i("[CLOCK] Successfully resynchronized with mobile network");
             } else {
                 log_w("[CLOCK] Failed to resynchronize time, continuing with local time");

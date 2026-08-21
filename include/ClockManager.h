@@ -56,9 +56,16 @@ private:
     // Calculate current time based on initial sync and elapsed milliseconds
     unsigned long calculateCurrentTime();
 
+    enum SyncSource {
+        SYNC_NONE,      // Not synced yet
+        SYNC_MOBILE,    // Synced from mobile network (local time, DST included)
+        SYNC_NTP        // Synced from NTP (UTC time)
+    };
+
     TinyGsm    &_modem;
     ConfigManager &_configManager;
     bool       _initialized;
+    SyncSource _syncSource;             // Track which source provided the time
     unsigned long _epochTime;           // Last synced Unix timestamp
     unsigned long _millisecondsAtSync;  // millis() value when we synced
     unsigned long _lastNtpSyncTime;     // millis() of last NTP sync

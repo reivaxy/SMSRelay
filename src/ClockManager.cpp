@@ -22,17 +22,7 @@ ClockManager::~ClockManager() {
 
 bool ClockManager::init() {
     log_i("[CLOCK] Initializing clock...");
-    
-    // First, detect network timezone (used by both NTP and mobile network sync)
-    log_i("[CLOCK] Detecting network timezone...");
-    if (detectNetworkTimezone()) {
-        log_i("[CLOCK] Network timezone detected: %d seconds (%+.1f hours)", 
-              _tzOffsetSec, (float)_tzOffsetSec / 3600.0f);
-    } else {
-        log_w("[CLOCK] Failed to detect network timezone, using UTC");
-        _tzOffsetSec = 0;
-    }
-    
+      
     // Try mobile network time first (fastest, already connected)
     log_i("[CLOCK] Attempting to sync time from mobile network...");
     if (syncWithMobileNetwork()) {
@@ -103,27 +93,6 @@ void ClockManager::disableWiFi() {
     log_i("[CLOCK] Disabling WiFi...");
     WiFi.disconnect(true);  // Turn off WiFi radio
     WiFi.mode(WIFI_OFF);
-}
-
-bool ClockManager::detectNetworkTimezone() {
-    log_i("[CLOCK] Attempting to detect network timezone from modem...");
-    
-    // Query modem for current network time to extract timezone
-    int year, month, day, hour, min, sec;
-    float tzOffsetHours = 0.0f;
-    
-    if (_modem.getNetworkTime(&year, &month, &day, &hour, &min, &sec, &tzOffsetHours)) {
-        // Convert hours to seconds (1 hour = 3600 seconds)
-        long tzOffsetSeconds = (long)(tzOffsetHours * 3600);
-        _tzOffsetSec = (int)tzOffsetSeconds;
-        
-        log_i("[CLOCK] Network timezone detected: %+.2f hours = %d seconds (%+.1f hours)",
-              tzOffsetHours, _tzOffsetSec, (float)_tzOffsetSec / 3600.0f);
-        return true;
-    }
-    
-    log_w("[CLOCK] Could not detect network timezone from modem");
-    return false;
 }
 
 bool ClockManager::syncWithNTP() {
@@ -215,7 +184,14 @@ bool ClockManager::syncWithMobileNetwork() {
             
             log_i("[CLOCK] Mobile network time synced: %04d-%02d-%02d %02d:%02d:%02d TZ:%+.2f (epoch: %lu, offset: %d sec)",
                   year, month, day, hour, min, sec, tzOffsetHours, _epochTime, _tzOffsetSec);
-            return true;
+            if (year != 0) {
+                _syncSource = SYNC_MOBILE;
+                _initialized = true;
+                return true;
+            } else {
+                return false;
+            }
+                  
         }
     }
     
@@ -336,12 +312,6 @@ void ClockManager::check() {
     // Check if we need to resync with NTP
     if (now - _lastNtpSyncTime >= ntpResyncMs) {
         log_i("[CLOCK] Time for NTP resynchronization (interval: %d hours)...", ntpIntervalHours);
-        
-        // Re-detect timezone in case device moved to different timezone
-        log_i("[CLOCK] Re-detecting network timezone...");
-        if (detectNetworkTimezone()) {
-            log_i("[CLOCK] Network timezone updated: %d seconds", _tzOffsetSec);
-        }
         
         if (syncWithNTP()) {
             _syncSource = SYNC_NTP;

@@ -72,9 +72,6 @@ private:
     unsigned long _ntpResyncIntervalMs; // Resync interval in milliseconds
     int        _tzOffsetSec;            // Timezone offset in seconds (from network)
 
-    // Detect network timezone from modem
-    bool detectNetworkTimezone();
-
     // NTP configuration
     static const char* NTP_SERVER1;
     static const char* NTP_SERVER2;

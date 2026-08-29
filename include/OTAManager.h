@@ -94,4 +94,5 @@ private:
     bool                   _updateInProgress;
     bool                   _updateCompleted;
     String                 _otaAccessToken;
+    bool                   _cancelRequested;
 };

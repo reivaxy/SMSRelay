@@ -10,7 +10,7 @@ OTAManager::OTAManager(SMSSender &sender, const String &targetNumber, ConfigMana
     : _sender(sender), _targetNumber(targetNumber), _configManager(configManager),
       _phoneNumberManager(phoneNumberManager), _alertManager(alertManager), _mainPowerCheck(mainPowerCheck), _modem(modem), _webManager(webManager),
       _webServer(nullptr), _isActive(false), _startTime(0), _uploadStarted(false), _uploadedBytes(0), _updateInProgress(false),
-      _updateCompleted(false), _otaAccessToken("") {
+      _updateCompleted(false), _otaAccessToken(""), _cancelRequested(false) {
     log_i("[OTA] OTAManager initialized");
 }
 
@@ -43,6 +43,7 @@ bool OTAManager::init() {
     _uploadedBytes = 0;
     _updateInProgress = false;
     _updateCompleted = false;
+    _cancelRequested = false;
 
     // Generate random access token for OTA endpoint
     _otaAccessToken = generateRandomToken();
@@ -454,7 +455,7 @@ String OTAManager::generateUploadPage() {
 
             xhr.addEventListener('load', () => {
                 if (xhr.status === 200) {
-                    statusDiv.textContent = 'OTA mode cancelled. Device is still in OTA mode.';
+                    statusDiv.textContent = 'OTA mode cancelled.';
                     statusDiv.className = 'success';
                 } else {
                     const response = JSON.parse(xhr.responseText);
@@ -595,10 +596,9 @@ void OTAManager::handleCancel() {
     
     _webServer->send(200, "application/json", response);
     
-    delay(100);
-    
-    // Stop OTA after sending response
-    stop();
+    // Mark for cancellation on next check() iteration to avoid deleting WebServer
+    // while handleClient() is still executing
+    _cancelRequested = true;
 }
 
 void OTAManager::sendURLtoSMS() {
@@ -638,6 +638,13 @@ void OTAManager::stop() {
 
 void OTAManager::check() {
     if (!_isActive || _webServer == nullptr) {
+        return;
+    }
+
+    // Check if cancel was requested (via web interface)
+    if (_cancelRequested) {
+        log_i("[OTA] Stopping OTA due to cancel request");
+        stop();
         return;
     }
 

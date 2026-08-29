@@ -2,11 +2,13 @@
 #include "ConfigManager.h"
 #include "SMSSender.h"
 #include "PhoneNumberManager.h"
+#include "AlertManager.h"
+#include "Modem.h"
 #include <ESPmDNS.h>
 #include <ctime>
 
-WebManager::WebManager(ConfigManager &configManager, SMSSender &sender, PhoneNumberManager &phoneNumberManager)
-    : _server(nullptr), _configManager(configManager), _sender(sender), _phoneNumberManager(phoneNumberManager),
+WebManager::WebManager(ConfigManager &configManager, SMSSender &sender, PhoneNumberManager &phoneNumberManager, AlertManager &alertManager, Modem &modem)
+    : _server(nullptr), _configManager(configManager), _sender(sender), _phoneNumberManager(phoneNumberManager), _alertManager(alertManager), _modem(modem),
       _isRunning(false), _requesterNumber(""), _serverURL(""), _accessToken("") {}
 
 WebManager::~WebManager() {
@@ -217,7 +219,7 @@ void WebManager::handleClient(WiFiClient client) {
         
         // Restart device after sending response
         delay(500);
-        ESP.restart();
+        _modem.restartDevice();
         return;
     }
     // Handle POST /api/weboff
@@ -402,6 +404,16 @@ String WebManager::generateHTMLForm() {
     html += "        .section { margin: 5px 0; padding: 8px; border-left: 4px solid #007bff; background: #f8f9fa; }\n";
     html += "        .section-title { font-weight: bold; color: #007bff; margin-bottom: 3px; font-size: 13px; }\n";
     html += "        .form-group { margin: 2px 0; }\n";
+    html += "        .sections-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; }\n";
+    html += "        .sections-grid .section { margin: 0; }\n";
+    html += "        .sections-full { grid-column: 1 / -1; }\n";
+    html += "        .alert-item { margin: 4px 0; padding: 6px; background: white; border-radius: 4px; border-left: 3px solid #ff6b6b; font-size: 12px; }\n";
+    html += "        .alert-code { font-weight: bold; color: #dc3545; font-family: monospace; }\n";
+    html += "        .alert-title { font-weight: bold; color: #333; display: inline; }\n";
+    html += "        .alert-cause { color: #666; font-size: 11px; }\n";
+    html += "        .alert-time { color: #999; font-size: 11px; display: block; margin-top: 2px; }\n";
+    html += "        .alert-ack { background: #d4edda; color: #155724; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 11px; display: inline-block; margin-left: 4px; }\n";
+    html += "        .no-alerts { color: #28a745; font-style: italic; font-size: 12px; }\n";
     html += "        label { display: block; margin-bottom: 2px; font-weight: bold; color: #333; font-size: 12px; }\n";
     html += "        input, textarea { width: 100%; padding: 6px; margin-bottom: 3px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; font-size: 14px; }\n";
     html += "        input[type=\"number\"] { width: 100%; }\n";
@@ -426,92 +438,105 @@ String WebManager::generateHTMLForm() {
     html += "        <div style=\"text-align: center; font-size: 12px; color: #666; margin-bottom: 10px;\">\n";
     html += "            Device Date/Time: " + String(dateBuffer) + "\n";
     html += "        </div>\n";
+    
+    // Display revision and git commit info
+#ifdef GIT_REV
+    html += "        <div style=\"text-align: center; font-size: 11px; color: #999; margin-bottom: 10px; font-family: monospace;\">\n";
+    html += "            Rev: " + String(GIT_REV) + "\n";
+    html += "        </div>\n";
+#endif
+    
+    // Alerts section
+    html += "        <div class=\"section sections-full\" style=\"border-left-color: #dc3545; background: #fff5f5;\">\n";
+    html += "            <div class=\"section-title\" style=\"color: #dc3545;\">Active Alerts</div>\n";
+    html += generateAlertsHTML();
+    html += "        </div>\n";
+    
     html += "        <form id=\"configForm\" data-token=\"" + _accessToken + "\">\n";
     html += "        <script>const ACCESS_TOKEN = '" + _accessToken + "';</script>\n";
+    
+    html += "            <div class=\"sections-grid\">\n";
 
     // Temperature section
-    html += "            <div class=\"section\">\n";
-    html += "                <div class=\"section-title\">Temperature (°C)</div>\n";
-    html += "                <div class=\"form-group\">\n";
-    html += "                    <label>High Alert: <input type=\"number\" step=\"0.1\" name=\"TEMP_HIGH\" value=\"" + String(_configManager.getFloat(ConfigManager::Param::TEMP_HIGH), 1) + "\"></label>\n";
+    html += "                <div class=\"section\">\n";
+    html += "                    <div class=\"section-title\">Temperature (°C)</div>\n";
+    html += "                    <div class=\"form-group\">\n";
+    html += "                        <label>High Alert: <input type=\"number\" step=\"0.1\" name=\"TEMP_HIGH\" value=\"" + String(_configManager.getFloat(ConfigManager::Param::TEMP_HIGH), 1) + "\"></label>\n";
+    html += "                    </div>\n";
+    html += "                    <div class=\"form-group\">\n";
+    html += "                        <label>Low Alert: <input type=\"number\" step=\"0.1\" name=\"TEMP_LOW\" value=\"" + String(_configManager.getFloat(ConfigManager::Param::TEMP_LOW), 1) + "\"></label>\n";
+    html += "                    </div>\n";
+    html += "                    <div class=\"form-group\">\n";
+    html += "                        <label>Offset: <input type=\"number\" step=\"0.1\" name=\"TEMP_OFFSET\" value=\"" + String(_configManager.getFloat(ConfigManager::Param::TEMP_OFFSET), 1) + "\"></label>\n";
+    html += "                    </div>\n";
     html += "                </div>\n";
-    html += "                <div class=\"form-group\">\n";
-    html += "                    <label>Low Alert: <input type=\"number\" step=\"0.1\" name=\"TEMP_LOW\" value=\"" + String(_configManager.getFloat(ConfigManager::Param::TEMP_LOW), 1) + "\"></label>\n";
-    html += "                </div>\n";
-    html += "                <div class=\"form-group\">\n";
-    html += "                    <label>Offset: <input type=\"number\" step=\"0.1\" name=\"TEMP_OFFSET\" value=\"" + String(_configManager.getFloat(ConfigManager::Param::TEMP_OFFSET), 1) + "\"></label>\n";
-    html += "                </div>\n";
-    html += "            </div>\n";
 
     // Humidity section
-    html += "            <div class=\"section\">\n";
-    html += "                <div class=\"section-title\">Humidity (%)</div>\n";
-    html += "                <div class=\"form-group\">\n";
-    html += "                    <label>High Alert: <input type=\"number\" step=\"0.1\" name=\"HUMIDITY_HIGH\" value=\"" + String(_configManager.getFloat(ConfigManager::Param::HUMIDITY_HIGH), 1) + "\"></label>\n";
+    html += "                <div class=\"section\">\n";
+    html += "                    <div class=\"section-title\">Humidity (%)</div>\n";
+    html += "                    <div class=\"form-group\">\n";
+    html += "                        <label>High Alert: <input type=\"number\" step=\"0.1\" name=\"HUMIDITY_HIGH\" value=\"" + String(_configManager.getFloat(ConfigManager::Param::HUMIDITY_HIGH), 1) + "\"></label>\n";
+    html += "                    </div>\n";
+    html += "                    <div class=\"form-group\">\n";
+    html += "                        <label>Low Alert: <input type=\"number\" step=\"0.1\" name=\"HUMIDITY_LOW\" value=\"" + String(_configManager.getFloat(ConfigManager::Param::HUMIDITY_LOW), 1) + "\"></label>\n";
+    html += "                    </div>\n";
+    html += "                    <div class=\"form-group\">\n";
+    html += "                        <label>Offset: <input type=\"number\" step=\"0.1\" name=\"HUMIDITY_OFFSET\" value=\"" + String(_configManager.getFloat(ConfigManager::Param::HUMIDITY_OFFSET), 1) + "\"></label>\n";
+    html += "                    </div>\n";
     html += "                </div>\n";
-    html += "                <div class=\"form-group\">\n";
-    html += "                    <label>Low Alert: <input type=\"number\" step=\"0.1\" name=\"HUMIDITY_LOW\" value=\"" + String(_configManager.getFloat(ConfigManager::Param::HUMIDITY_LOW), 1) + "\"></label>\n";
-    html += "                </div>\n";
-    html += "                <div class=\"form-group\">\n";
-    html += "                    <label>Offset: <input type=\"number\" step=\"0.1\" name=\"HUMIDITY_OFFSET\" value=\"" + String(_configManager.getFloat(ConfigManager::Param::HUMIDITY_OFFSET), 1) + "\"></label>\n";
-    html += "                </div>\n";
-    html += "            </div>\n";
 
     // Battery section
-    html += "            <div class=\"section\">\n";
-    html += "                <div class=\"section-title\">Battery (ADC)</div>\n";
-    html += "                <div class=\"form-group\">\n";
-    html += "                    <label>Threshold: <input type=\"number\" name=\"BAT_THRESHOLD\" value=\"" + String(_configManager.getInt(ConfigManager::Param::BAT_ADC_THRESHOLD)) + "\"></label>\n";
+    html += "                <div class=\"section\">\n";
+    html += "                    <div class=\"section-title\">Battery (ADC)</div>\n";
+    html += "                    <div class=\"form-group\">\n";
+    html += "                        <label>Threshold: <input type=\"number\" name=\"BAT_THRESHOLD\" value=\"" + String(_configManager.getInt(ConfigManager::Param::BAT_ADC_THRESHOLD)) + "\"></label>\n";
+    html += "                    </div>\n";
+    html += "                    <div class=\"form-group\">\n";
+    html += "                        <label>Near Empty: <input type=\"number\" name=\"BAT_NEAR_EMPTY\" value=\"" + String(_configManager.getInt(ConfigManager::Param::BAT_ADC_NEAR_EMPTY)) + "\"></label>\n";
+    html += "                    </div>\n";
     html += "                </div>\n";
-    html += "                <div class=\"form-group\">\n";
-    html += "                    <label>Near Empty: <input type=\"number\" name=\"BAT_NEAR_EMPTY\" value=\"" + String(_configManager.getInt(ConfigManager::Param::BAT_ADC_NEAR_EMPTY)) + "\"></label>\n";
-    html += "                </div>\n";
-    html += "            </div>\n";
 
     // Power section
-    html += "            <div class=\"section\">\n";
-    html += "                <div class=\"section-title\">Power (ADC)</div>\n";
-    html += "                <div class=\"form-group\">\n";
-    html += "                    <label>Threshold: <input type=\"number\" name=\"POWER_THRESHOLD\" value=\"" + String(_configManager.getInt(ConfigManager::Param::POWER_ADC_THRESHOLD)) + "\"></label>\n";
+    html += "                <div class=\"section\">\n";
+    html += "                    <div class=\"section-title\">Power (ADC)</div>\n";
+    html += "                    <div class=\"form-group\">\n";
+    html += "                        <label>Threshold: <input type=\"number\" name=\"POWER_THRESHOLD\" value=\"" + String(_configManager.getInt(ConfigManager::Param::POWER_ADC_THRESHOLD)) + "\"></label>\n";
+    html += "                    </div>\n";
     html += "                </div>\n";
-    html += "            </div>\n";
 
-    // Alerts section
-    html += "            <div class=\"section\">\n";
-    html += "                <div class=\"section-title\">Alerts</div>\n";
-    html += "                <div class=\"form-group\">\n";
-    html += "                    <label>Resend Delay (minutes): <input type=\"number\" name=\"RESEND_MINS\" value=\"" + String(_configManager.getInt(ConfigManager::Param::ALERT_RESEND_DELAY_MINS)) + "\"></label>\n";
+    // Alerts settings section
+    html += "                <div class=\"section\">\n";
+    html += "                    <div class=\"section-title\">Alerts & SMS</div>\n";
+    html += "                    <div class=\"form-group\">\n";
+    html += "                        <label>Resend Delay (minutes): <input type=\"number\" name=\"RESEND_MINS\" value=\"" + String(_configManager.getInt(ConfigManager::Param::ALERT_RESEND_DELAY_MINS)) + "\"></label>\n";
+    html += "                    </div>\n";
+    html += "                    <div class=\"form-group\">\n";
+    html += "                        <label>SMS Send Disabled (0=enabled, 1=disabled): <input type=\"number\" name=\"SMS_DISABLED\" min=\"0\" max=\"1\" value=\"" + String(_configManager.getInt(ConfigManager::Param::SMS_SEND_DISABLED)) + "\"></label>\n";
+    html += "                    </div>\n";
     html += "                </div>\n";
-    html += "            </div>\n";
 
     // Network section
-    html += "            <div class=\"section\">\n";
-    html += "                <div class=\"section-title\">Network</div>\n";
-    html += "                <div class=\"form-group\">\n";
-    html += "                    <label>NTP Resync (hours): <input type=\"number\" name=\"NTP_RESYNC_HRS\" value=\"" + String(_configManager.getInt(ConfigManager::Param::NTP_RESYNC_HOURS)) + "\"></label>\n";
+    html += "                <div class=\"section\">\n";
+    html += "                    <div class=\"section-title\">Network</div>\n";
+    html += "                    <div class=\"form-group\">\n";
+    html += "                        <label>NTP Resync (hours): <input type=\"number\" name=\"NTP_RESYNC_HRS\" value=\"" + String(_configManager.getInt(ConfigManager::Param::NTP_RESYNC_HOURS)) + "\"></label>\n";
+    html += "                    </div>\n";
+    html += "                    <div class=\"form-group\">\n";
+    html += "                        <label>DST Offset (seconds): <input type=\"number\" name=\"DST_OFFSET\" value=\"" + String(_configManager.getInt(ConfigManager::Param::DST_OFFSET)) + "\"></label>\n";
+    html += "                    </div>\n";
     html += "                </div>\n";
-    html += "                <div class=\"form-group\">\n";
-    html += "                    <label>DST Offset (seconds): <input type=\"number\" name=\"DST_OFFSET\" value=\"" + String(_configManager.getInt(ConfigManager::Param::DST_OFFSET)) + "\"></label>\n";
-    html += "                </div>\n";
-    html += "            </div>\n";
 
-    // SMS section
-    html += "            <div class=\"section\">\n";
-    html += "                <div class=\"section-title\">SMS</div>\n";
-    html += "                <div class=\"form-group\">\n";
-    html += "                    <label>Send Disabled (0=enabled, 1=disabled): <input type=\"number\" name=\"SMS_DISABLED\" min=\"0\" max=\"1\" value=\"" + String(_configManager.getInt(ConfigManager::Param::SMS_SEND_DISABLED)) + "\"></label>\n";
+    // WiFi section (full width)
+    html += "                <div class=\"section sections-full\">\n";
+    html += "                    <div class=\"section-title\">WiFi Credentials</div>\n";
+    html += "                    <div class=\"form-group\">\n";
+    html += "                        <label>SSID: <input type=\"text\" name=\"WIFI_SSID\" value=\"" + _configManager.getStringParam(ConfigManager::Param::WIFI_SSID) + "\"></label>\n";
+    html += "                    </div>\n";
+    html += "                    <div class=\"form-group\">\n";
+    html += "                        <label>Password: <input type=\"password\" name=\"WIFI_PWD\" placeholder=\"Leave empty to keep current\"></label>\n";
+    html += "                    </div>\n";
     html += "                </div>\n";
-    html += "            </div>\n";
-
-    // WiFi section
-    html += "            <div class=\"section\">\n";
-    html += "                <div class=\"section-title\">WiFi Credentials</div>\n";
-    html += "                <div class=\"form-group\">\n";
-    html += "                    <label>SSID: <input type=\"text\" name=\"WIFI_SSID\" value=\"" + _configManager.getStringParam(ConfigManager::Param::WIFI_SSID) + "\"></label>\n";
-    html += "                </div>\n";
-    html += "                <div class=\"form-group\">\n";
-    html += "                    <label>Password: <input type=\"password\" name=\"WIFI_PWD\" placeholder=\"Leave empty to keep current\"></label>\n";
-    html += "                </div>\n";
+    
     html += "            </div>\n";
 
     html += "            <div style=\"display: grid; grid-template-columns: 1fr 1fr; gap: 5px;\">\n";
@@ -623,5 +648,102 @@ String WebManager::generateRandomToken() {
     }
     
     return token;
+}
+
+String WebManager::generateAlertsHTML() {
+    String alertsContent = _alertManager.getPendingAlertsList();
+    String html = "";
+    
+    // Check if there are no alerts
+    if (alertsContent.indexOf("No pending alerts") >= 0) {
+        html += "            <div class=\"no-alerts\">✓ No active alerts</div>\n";
+        return html;
+    }
+    
+    // Parse the alerts list and format as HTML
+    // The format is: "[CODE] TITLE (CAUSE) @ TIME [ACK:N]"
+    int startPos = alertsContent.indexOf("Pending alerts:");
+    if (startPos < 0) {
+        html += "            <div class=\"no-alerts\">Unable to load alerts</div>\n";
+        return html;
+    }
+    
+    startPos += 15;  // Length of "Pending alerts:"
+    
+    // Process each line
+    int currentPos = startPos;
+    while (currentPos < (int)alertsContent.length()) {
+        // Find the end of the line
+        int lineEnd = alertsContent.indexOf('\n', currentPos);
+        if (lineEnd < 0) lineEnd = alertsContent.length();
+        
+        String line = alertsContent.substring(currentPos, lineEnd);
+        line.trim();
+        
+        if (line.length() > 0 && line[0] == '[') {
+            // Parse alert line
+            int codeEnd = line.indexOf(']');
+            String code = line.substring(1, codeEnd);
+            String remaining = line.substring(codeEnd + 2);  // Skip "] "
+            
+            // Extract ACK info
+            String ackInfo = "";
+            int ackPos = remaining.indexOf("[ACK:");
+            String title = remaining;
+            if (ackPos >= 0) {
+                title = remaining.substring(0, ackPos);
+                int ackEnd = remaining.indexOf(']', ackPos);
+                ackInfo = remaining.substring(ackPos, ackEnd + 1);
+            }
+            
+            // Extract cause and timestamp
+            String cause = "";
+            String timeStr = "";
+            int causeStart = title.indexOf(" (");
+            int causeEnd = title.indexOf(")");
+            if (causeStart >= 0 && causeEnd > causeStart) {
+                cause = title.substring(causeStart + 2, causeEnd);
+                title = title.substring(0, causeStart);
+                
+                // Extract timestamp after cause
+                int timeStart = remaining.indexOf("@ ");
+                if (timeStart >= 0 && ackPos > timeStart) {
+                    timeStr = remaining.substring(timeStart + 2, ackPos >= 0 ? ackPos : remaining.length());
+                }
+            } else {
+                // No cause, check for timestamp
+                int timeStart = remaining.indexOf("@ ");
+                if (timeStart >= 0) {
+                    if (ackPos >= 0) {
+                        timeStr = remaining.substring(timeStart + 2, ackPos);
+                    } else {
+                        timeStr = remaining.substring(timeStart + 2);
+                    }
+                }
+            }
+            
+            timeStr.trim();
+            
+            // Format as HTML alert item
+            html += "            <div class=\"alert-item\">\n";
+            html += "                <span class=\"alert-code\">[" + code + "]</span> ";
+            html += "<span class=\"alert-title\">" + title + "</span>";
+            if (ackInfo.length() > 0) {
+                html += " <span class=\"alert-ack\">" + ackInfo + "</span>";
+            }
+            html += "\n";
+            if (cause.length() > 0) {
+                html += "                <div class=\"alert-cause\">Cause: " + cause + "</div>\n";
+            }
+            if (timeStr.length() > 0) {
+                html += "                <div class=\"alert-time\">Time: " + timeStr + "</div>\n";
+            }
+            html += "            </div>\n";
+        }
+        
+        currentPos = lineEnd + 1;
+    }
+    
+    return html;
 }
 

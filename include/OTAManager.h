@@ -7,6 +7,7 @@
 #include "ConfigManager.h"
 #include "PhoneNumberManager.h"
 #include "AlertManager.h"
+#include "Modem.h"
 
 // Forward declarations
 class MainPowerCheck;
@@ -26,7 +27,7 @@ public:
     static const unsigned long OTA_UPLOAD_TIMEOUT_MS = 90000;
 
     OTAManager(SMSSender &sender, const String &targetNumber, ConfigManager &configManager, 
-               PhoneNumberManager &phoneNumberManager, AlertManager &alertManager, MainPowerCheck &mainPowerCheck);
+               PhoneNumberManager &phoneNumberManager, AlertManager &alertManager, MainPowerCheck &mainPowerCheck, Modem &modem);
     ~OTAManager();
 
     // Initialize OTA manager (connects to WiFi, starts web server)
@@ -54,9 +55,13 @@ private:
     void handleUpload();
     void handleFileUpload();
     void handleStatus();
+    void handleCancel();
 
     // Generate HTML page with upload form
     String generateUploadPage();
+
+    // Generate a random 10-character alphanumeric token
+    String generateRandomToken();
 
     // Connect to configured WiFi
     bool connectToWiFi();
@@ -76,6 +81,7 @@ private:
     PhoneNumberManager     &_phoneNumberManager;
     AlertManager           &_alertManager;
     MainPowerCheck         &_mainPowerCheck;
+    Modem                  &_modem;
     
     WebServer              *_webServer;
     bool                   _isActive;
@@ -85,4 +91,5 @@ private:
     size_t                 _uploadedBytes;
     bool                   _updateInProgress;
     bool                   _updateCompleted;
+    String                 _otaAccessToken;
 };

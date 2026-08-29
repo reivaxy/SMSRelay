@@ -44,6 +44,18 @@ public:
      */
     void checkConnection();
 
+    /**
+     * Shutdown the modem by powering it down.
+     * Used when device needs to be restarted cleanly.
+     */
+    void shutdown();
+
+    /**
+     * Restart the device after cleanly shutting down the modem.
+     * Ensures proper modem power-down before ESP restart.
+     */
+    void restartDevice();
+
 private:
     /**
      * Initialize modem hardware pins (reset, power, DTR, ring, etc.)

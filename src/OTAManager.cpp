@@ -5,11 +5,11 @@
 #include <esp_ota_ops.h>
 
 OTAManager::OTAManager(SMSSender &sender, const String &targetNumber, ConfigManager &configManager, 
-                       PhoneNumberManager &phoneNumberManager, AlertManager &alertManager, MainPowerCheck &mainPowerCheck)
+                       PhoneNumberManager &phoneNumberManager, AlertManager &alertManager, MainPowerCheck &mainPowerCheck, Modem &modem)
     : _sender(sender), _targetNumber(targetNumber), _configManager(configManager),
-      _phoneNumberManager(phoneNumberManager), _alertManager(alertManager), _mainPowerCheck(mainPowerCheck),
+      _phoneNumberManager(phoneNumberManager), _alertManager(alertManager), _mainPowerCheck(mainPowerCheck), _modem(modem),
       _webServer(nullptr), _isActive(false), _startTime(0), _uploadStarted(false), _uploadedBytes(0), _updateInProgress(false),
-      _updateCompleted(false) {
+      _updateCompleted(false), _otaAccessToken("") {
     log_i("[OTA] OTAManager initialized");
 }
 
@@ -35,6 +35,10 @@ bool OTAManager::init() {
     _uploadedBytes = 0;
     _updateInProgress = false;
     _updateCompleted = false;
+
+    // Generate random access token for OTA endpoint
+    _otaAccessToken = generateRandomToken();
+    log_i("[OTA] Generated access token: %s", _otaAccessToken.c_str());
 
     // Connect to WiFi
     if (!connectToWiFi()) {
@@ -116,11 +120,17 @@ bool OTAManager::startWebServer() {
         return false;
     }
 
-    // Set up routes
-    _webServer->on("/", HTTP_GET, [this]() { handleRoot(); });
-    _webServer->on("/upload", HTTP_POST, [this]() { handleStatus(); }, [this]() { handleFileUpload(); });
+    // Set up routes with random access token
+    String rootPath = "/" + _otaAccessToken + "/";
+    String uploadPath = "/" + _otaAccessToken + "/upload";
+    String cancelPath = "/" + _otaAccessToken + "/cancel";
+    
+    _webServer->on(rootPath, HTTP_GET, [this]() { handleRoot(); });
+    _webServer->on(uploadPath, HTTP_POST, [this]() { handleStatus(); }, [this]() { handleFileUpload(); });
+    _webServer->on(cancelPath, HTTP_POST, [this]() { handleCancel(); });
     _webServer->onNotFound([this]() {
-        _webServer->send(404, "text/plain", "Not Found");
+        log_w("[OTA] Access denied - invalid token in path: %s", _webServer->uri().c_str());
+        _webServer->send(403, "text/plain", "Forbidden");
     });
 
     _webServer->begin();
@@ -135,7 +145,7 @@ void OTAManager::handleRoot() {
 }
 
 String OTAManager::generateUploadPage() {
-    return R"(
+    String html = R"(
 <!DOCTYPE html>
 <html lang='en'>
 <head>
@@ -191,6 +201,22 @@ String OTAManager::generateUploadPage() {
         }
         button:hover {
             background-color: #45a049;
+        }
+        button.cancel-btn {
+            background-color: #dc3545;
+            margin-left: 10px;
+        }
+        button.cancel-btn:hover {
+            background-color: #c82333;
+        }
+        .button-group {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .button-group button {
+            margin-top: 0;
         }
         .info {
             background-color: #e7f3fe;
@@ -274,8 +300,13 @@ String OTAManager::generateUploadPage() {
                 <label for='firmwareFile'>Select Firmware File (.bin):</label>
                 <input type='file' id='firmwareFile' name='firmware' accept='.bin' required>
             </div>
-            <button type='button' onclick='uploadFirmware()'>Upload and Update</button>
+            <div class='button-group'>
+                <button type='button' onclick='uploadFirmware()'>Upload and Update</button>
+                <button type='button' class='cancel-btn' onclick='cancelOTA()'>Cancel OTA</button>
+            </div>
         </form>
+
+        <script>const OTA_ACCESS_TOKEN = ')" + _otaAccessToken + R"(';</script>
 
         <div id='progress' class='progress' style='display:none;'>
             <progress id='progressBar' value='0' max='100'></progress>
@@ -329,9 +360,6 @@ String OTAManager::generateUploadPage() {
         }
 
         function uploadFirmware() {
-            uploadStarted = true;
-            const timerDiv = document.getElementById('timerDiv');
-            timerDiv.style.display = 'none';
             const fileInput = document.getElementById('firmwareFile');
             const file = fileInput.files[0];
             const statusDiv = document.getElementById('status');
@@ -340,14 +368,21 @@ String OTAManager::generateUploadPage() {
             if (!file) {
                 statusDiv.textContent = 'Please select a file';
                 statusDiv.className = 'error';
+                statusDiv.style.display = 'block';
                 return;
             }
 
             if (!file.name.endsWith('.bin')) {
                 statusDiv.textContent = 'File must be a .bin file';
                 statusDiv.className = 'error';
+                statusDiv.style.display = 'block';
                 return;
             }
+
+            // All validations passed, now mark upload as started and hide timer
+            uploadStarted = true;
+            const timerDiv = document.getElementById('timerDiv');
+            timerDiv.style.display = 'none';
 
             statusDiv.textContent = 'Uploading...';
             statusDiv.className = 'warning';
@@ -386,8 +421,53 @@ String OTAManager::generateUploadPage() {
                 progressDiv.style.display = 'none';
             });
 
-            xhr.open('POST', '/upload');
+            xhr.open('POST', '/' + OTA_ACCESS_TOKEN + '/upload');
             xhr.send(formData);
+        }
+
+        function cancelOTA() {
+            if (!confirm('Cancel OTA mode?')) {
+                return;
+            }
+
+            const statusDiv = document.getElementById('status');
+            const fileInput = document.getElementById('firmwareFile');
+            const buttons = document.querySelectorAll('button');
+
+            statusDiv.textContent = 'Cancelling OTA mode...';
+            statusDiv.className = 'warning';
+            statusDiv.style.display = 'block';
+
+            // Disable buttons
+            buttons.forEach(btn => btn.disabled = true);
+            fileInput.disabled = true;
+
+            const xhr = new XMLHttpRequest();
+
+            xhr.addEventListener('load', () => {
+                if (xhr.status === 200) {
+                    statusDiv.textContent = 'OTA mode cancelled. Device is still in OTA mode.';
+                    statusDiv.className = 'success';
+                } else {
+                    const response = JSON.parse(xhr.responseText);
+                    statusDiv.textContent = 'Error: ' + (response.message || 'Cancel failed');
+                    statusDiv.className = 'error';
+                    // Re-enable buttons on error
+                    buttons.forEach(btn => btn.disabled = false);
+                    fileInput.disabled = false;
+                }
+            });
+
+            xhr.addEventListener('error', () => {
+                statusDiv.textContent = 'Connection error during cancel';
+                statusDiv.className = 'error';
+                // Re-enable buttons on error
+                buttons.forEach(btn => btn.disabled = false);
+                fileInput.disabled = false;
+            });
+
+            xhr.open('POST', '/' + OTA_ACCESS_TOKEN + '/cancel');
+            xhr.send();
         }
 
         // Start timer when page loads
@@ -397,10 +477,13 @@ String OTAManager::generateUploadPage() {
 </body>
 </html>
     )";
+    
+    return html;
 }
 
 void OTAManager::handleFileUpload() {
-    if (_webServer->uri() != "/upload") {
+    String expectedUploadPath = "/" + _otaAccessToken + "/upload";
+    if (_webServer->uri() != expectedUploadPath) {
         return;
     }
 
@@ -498,9 +581,21 @@ void OTAManager::handleUpload() {
     handleFileUpload();
 }
 
+void OTAManager::handleCancel() {
+    log_i("[OTA] Cancel request received");
+    String response = "{\"status\":\"ok\",\"message\":\"OTA mode cancelled\"}";
+    
+    _webServer->send(200, "application/json", response);
+    
+    delay(100);
+    
+    // Stop OTA after sending response
+    stop();
+}
+
 void OTAManager::sendURLtoSMS() {
     String localIP = getLocalIP();
-    String url = "http://" + localIP;
+    String url = "http://" + localIP + "/" + _otaAccessToken + "/";
     String message = "OTA Mode Active for 90 seconds!\nAccess: " + url;
     
     log_i("[OTA] Sending URL to %s: %s", _requesterNumber.c_str(), url.c_str());
@@ -559,8 +654,20 @@ void OTAManager::check() {
     // Restart is triggered by handleStatus() after file upload completes, not here
 }
 
+
+String OTAManager::generateRandomToken() {
+    const char charset[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    String token = "";
+    
+    for (int i = 0; i < 10; i++) {
+        int index = random(0, sizeof(charset) - 1);
+        token += charset[index];
+    }
+    
+    return token;
+}
+
 void OTAManager::restartDevice() {
-    log_i("[OTA] Restarting device...");
-    delay(1000);
-    ESP.restart();
+    log_i("[OTA] Device restart initiated");
+    _modem.restartDevice();
 }

@@ -7,10 +7,12 @@
 class ConfigManager;
 class SMSSender;
 class PhoneNumberManager;
+class AlertManager;
+class Modem;
 
 class WebManager {
 public:
-    WebManager(ConfigManager &configManager, SMSSender &sender, PhoneNumberManager &phoneNumberManager);
+    WebManager(ConfigManager &configManager, SMSSender &sender, PhoneNumberManager &phoneNumberManager, AlertManager &alertManager, Modem &modem);
     ~WebManager();
 
     // Start web server and connect to home WiFi
@@ -42,11 +44,16 @@ private:
     
     // Generate a random 10-character alphanumeric token
     String generateRandomToken();
+    
+    // Generate HTML for pending alerts display
+    String generateAlertsHTML();
 
     WiFiServer              *_server;
     ConfigManager           &_configManager;
     SMSSender               &_sender;
     PhoneNumberManager      &_phoneNumberManager;
+    AlertManager            &_alertManager;
+    Modem                   &_modem;
     bool                     _isRunning;
     String                   _requesterNumber;
     String                   _serverURL;

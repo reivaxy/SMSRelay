@@ -7,16 +7,17 @@
 #include "ClockManager.h"
 #include "OTAManager.h"
 #include "WebManager.h"
+#include "Modem.h"
 #include "utilities.h"
 
 SMSProcessor::SMSProcessor(SMSSender &sender, const String &targetNumber, SMSReader &reader, 
                            MainPowerCheck &mainPowerCheck, BatteryProcessor &batteryProcessor, TemperatureHumidityProcessor &tempHumidityProcessor,
                            ConfigManager &configManager, PhoneNumberManager &phoneNumberManager, AlertManager &alertManager, ClockManager &clockManager,
-                           OTAManager &otaManager, WebManager &webManager)
+                           OTAManager &otaManager, WebManager &webManager, Modem &modem)
     : _sender(sender), _targetNumber(targetNumber), _reader(reader), _mainPowerCheck(mainPowerCheck),
       _batteryProcessor(batteryProcessor), _tempHumidityProcessor(tempHumidityProcessor), 
       _configManager(configManager), _phoneNumberManager(phoneNumberManager), _alertManager(alertManager), _clockManager(clockManager),
-      _otaManager(otaManager), _webManager(webManager) {}
+      _otaManager(otaManager), _webManager(webManager), _modem(modem) {}
 
 void SMSProcessor::process(const ReceivedSMS &sms)
 {
@@ -837,7 +838,7 @@ void SMSProcessor::handleRestartCommand(const String &senderNumber) {
     delay(1000);
     
     log_i("[CMD] Executing device restart");
-    ESP.restart();
+    _modem.restartDevice();
 }
 
 void SMSProcessor::handleWebCommand(const String &rest, const String &senderNumber) {

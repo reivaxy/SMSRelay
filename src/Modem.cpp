@@ -320,3 +320,21 @@ void Modem::checkConnection()
     
     _lastConnectionCheck = millis();
 }
+
+void Modem::shutdown()
+{
+    log_i("Modem shutting down...");
+    powerDownModem();
+    _initialized = false;
+}
+
+void Modem::restartDevice()
+{
+    log_i("Modem shutting down before restart...");
+    shutdown();
+    delay(500);
+    
+    log_i("Restarting device...");
+    delay(1000);
+    ESP.restart();
+}

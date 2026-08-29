@@ -48,9 +48,9 @@ AlertManager                 alertManager(sender, configManager, phoneNumberMana
 BatteryProcessor             batteryProcessor(sender, ROOT_NUMBER, configManager, phoneNumberManager);
 MainPowerCheck               mainPowerCheck(sender, ROOT_NUMBER, configManager, phoneNumberManager, alertManager);
 TemperatureHumidityProcessor tempHumidityProcessor(sender, ROOT_NUMBER, BOARD_DHT_PIN, configManager, phoneNumberManager, alertManager);
-OTAManager                   otaManager(sender, ROOT_NUMBER, configManager, phoneNumberManager, alertManager, mainPowerCheck);
-WebManager                   webManager(configManager, sender, phoneNumberManager);
-SMSProcessor                 processor(sender, ROOT_NUMBER, reader, mainPowerCheck, batteryProcessor, tempHumidityProcessor, configManager, phoneNumberManager, alertManager, clockManager, otaManager, webManager);
+OTAManager                   otaManager(sender, ROOT_NUMBER, configManager, phoneNumberManager, alertManager, mainPowerCheck, modem);
+WebManager                   webManager(configManager, sender, phoneNumberManager, alertManager, modem);
+SMSProcessor                 processor(sender, ROOT_NUMBER, reader, mainPowerCheck, batteryProcessor, tempHumidityProcessor, configManager, phoneNumberManager, alertManager, clockManager, otaManager, webManager, modem);
 SerialConsole                console(processor);
 
 void setup()

@@ -13,6 +13,7 @@ class AlertManager;
 class ClockManager;
 class OTAManager;
 class WebManager;
+class Modem;
 
 // Handles command SMS received from authorized phone numbers.
 // Supported commands:
@@ -41,7 +42,7 @@ public:
     SMSProcessor(SMSSender &sender, const String &targetNumber, SMSReader &reader, 
                  MainPowerCheck &mainPowerCheck, BatteryProcessor &batteryProcessor, TemperatureHumidityProcessor &tempHumidityProcessor,
                  ConfigManager &configManager, PhoneNumberManager &phoneNumberManager, AlertManager &alertManager, ClockManager &clockManager,
-                 OTAManager &otaManager, WebManager &webManager);
+                 OTAManager &otaManager, WebManager &webManager, Modem &modem);
 
     // Processes a command SMS. The original SMS is always considered handled
     // (caller should delete it regardless of individual command success).
@@ -88,4 +89,5 @@ private:
     ClockManager                     &_clockManager;
     OTAManager                       &_otaManager;
     WebManager                       &_webManager;
+    Modem                            &_modem;
 };

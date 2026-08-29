@@ -1,13 +1,14 @@
 #include "OTAManager.h"
 #include "MainPowerCheck.h"
+#include "WebManager.h"
 #include "utilities.h"
 #include <esp_wifi.h>
 #include <esp_ota_ops.h>
 
 OTAManager::OTAManager(SMSSender &sender, const String &targetNumber, ConfigManager &configManager, 
-                       PhoneNumberManager &phoneNumberManager, AlertManager &alertManager, MainPowerCheck &mainPowerCheck, Modem &modem)
+                       PhoneNumberManager &phoneNumberManager, AlertManager &alertManager, MainPowerCheck &mainPowerCheck, Modem &modem, WebManager &webManager)
     : _sender(sender), _targetNumber(targetNumber), _configManager(configManager),
-      _phoneNumberManager(phoneNumberManager), _alertManager(alertManager), _mainPowerCheck(mainPowerCheck), _modem(modem),
+      _phoneNumberManager(phoneNumberManager), _alertManager(alertManager), _mainPowerCheck(mainPowerCheck), _modem(modem), _webManager(webManager),
       _webServer(nullptr), _isActive(false), _startTime(0), _uploadStarted(false), _uploadedBytes(0), _updateInProgress(false),
       _updateCompleted(false), _otaAccessToken("") {
     log_i("[OTA] OTAManager initialized");
@@ -20,6 +21,13 @@ OTAManager::~OTAManager() {
 bool OTAManager::init() {
     if (_isActive) {
         log_w("[OTA] OTA already active");
+        return false;
+    }
+
+    // Check if web configuration is active
+    if (_webManager.isRunning()) {
+        log_w("[OTA] OTA denied: WebManager is currently active");
+        _sender.send(_targetNumber, "ERROR: Cannot activate OTA mode while web configuration is active. Stop web server first.");
         return false;
     }
 

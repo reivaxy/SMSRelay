@@ -11,6 +11,7 @@
 
 // Forward declarations
 class MainPowerCheck;
+class WebManager;
 
 // Manages OTA firmware updates via WiFi and file upload.
 // Features:
@@ -27,7 +28,7 @@ public:
     static const unsigned long OTA_UPLOAD_TIMEOUT_MS = 90000;
 
     OTAManager(SMSSender &sender, const String &targetNumber, ConfigManager &configManager, 
-               PhoneNumberManager &phoneNumberManager, AlertManager &alertManager, MainPowerCheck &mainPowerCheck, Modem &modem);
+               PhoneNumberManager &phoneNumberManager, AlertManager &alertManager, MainPowerCheck &mainPowerCheck, Modem &modem, WebManager &webManager);
     ~OTAManager();
 
     // Initialize OTA manager (connects to WiFi, starts web server)
@@ -82,6 +83,7 @@ private:
     AlertManager           &_alertManager;
     MainPowerCheck         &_mainPowerCheck;
     Modem                  &_modem;
+    WebManager             &_webManager;
     
     WebServer              *_webServer;
     bool                   _isActive;

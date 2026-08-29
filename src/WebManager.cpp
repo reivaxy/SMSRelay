@@ -5,7 +5,6 @@
 #include "AlertManager.h"
 #include "ClockManager.h"
 #include "Modem.h"
-#include <ESPmDNS.h>
 #include <ctime>
 
 WebManager::WebManager(ConfigManager &configManager, SMSSender &sender, PhoneNumberManager &phoneNumberManager, AlertManager &alertManager, Modem &modem, ClockManager &clockManager)
@@ -53,14 +52,6 @@ bool WebManager::init(const String &requesterNumber) {
 
     log_i("[WEB] WiFi connected. IP: %s", WiFi.localIP().toString().c_str());
 
-    // Initialize mDNS to advertise as smsrelay.local
-    if (!MDNS.begin("smsrelay")) {
-        log_e("[WEB] Failed to start mDNS");
-        WiFi.disconnect(true);
-        return false;
-    }
-    log_i("[WEB] mDNS started as smsrelay.local");
-
     // Generate random access token
     _accessToken = generateRandomToken();
     log_i("[WEB] Generated access token: %s", _accessToken.c_str());
@@ -70,16 +61,13 @@ bool WebManager::init(const String &requesterNumber) {
     _server->begin();
     _isRunning = true;
 
-    // Add mDNS service for HTTP
-    MDNS.addService("http", "tcp", 80);
-
     // Build server URLs with access token
     String ipURL = "http://" + WiFi.localIP().toString() + "/" + _accessToken + "/";
-    _serverURL = "http://smsrelay.local/" + _accessToken + "/";
-    log_i("[WEB] Web server started at: %s (also accessible via IP: %s)", _serverURL.c_str(), ipURL.c_str());
+    _serverURL = "http://" + WiFi.localIP().toString() + "/" + _accessToken + "/";
+    log_i("[WEB] Web server started at: %s", _serverURL.c_str());
 
-    // Send both URLs to requester
-    _sender.send(requesterNumber, "OK: Web interface started\n" + _serverURL + "\nor\n" + ipURL);
+    // Send URL to requester
+    _sender.send(requesterNumber, "OK: Web interface started\n" + _serverURL);
 
     return true;
 }
@@ -94,9 +82,6 @@ void WebManager::stop() {
         delete _server;
         _server = nullptr;
     }
-
-    // Stop mDNS
-    MDNS.end();
 
     WiFi.disconnect(true);  // true = turn off WiFi radio
     _isRunning = false;

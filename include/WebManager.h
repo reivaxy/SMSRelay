@@ -9,10 +9,11 @@ class SMSSender;
 class PhoneNumberManager;
 class AlertManager;
 class Modem;
+class ClockManager;
 
 class WebManager {
 public:
-    WebManager(ConfigManager &configManager, SMSSender &sender, PhoneNumberManager &phoneNumberManager, AlertManager &alertManager, Modem &modem);
+    WebManager(ConfigManager &configManager, SMSSender &sender, PhoneNumberManager &phoneNumberManager, AlertManager &alertManager, Modem &modem, ClockManager &clockManager);
     ~WebManager();
 
     // Start web server and connect to home WiFi
@@ -54,6 +55,7 @@ private:
     PhoneNumberManager      &_phoneNumberManager;
     AlertManager            &_alertManager;
     Modem                   &_modem;
+    ClockManager            &_clockManager;
     bool                     _isRunning;
     String                   _requesterNumber;
     String                   _serverURL;

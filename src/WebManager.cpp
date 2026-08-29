@@ -3,12 +3,13 @@
 #include "SMSSender.h"
 #include "PhoneNumberManager.h"
 #include "AlertManager.h"
+#include "ClockManager.h"
 #include "Modem.h"
 #include <ESPmDNS.h>
 #include <ctime>
 
-WebManager::WebManager(ConfigManager &configManager, SMSSender &sender, PhoneNumberManager &phoneNumberManager, AlertManager &alertManager, Modem &modem)
-    : _server(nullptr), _configManager(configManager), _sender(sender), _phoneNumberManager(phoneNumberManager), _alertManager(alertManager), _modem(modem),
+WebManager::WebManager(ConfigManager &configManager, SMSSender &sender, PhoneNumberManager &phoneNumberManager, AlertManager &alertManager, Modem &modem, ClockManager &clockManager)
+    : _server(nullptr), _configManager(configManager), _sender(sender), _phoneNumberManager(phoneNumberManager), _alertManager(alertManager), _modem(modem), _clockManager(clockManager),
       _isRunning(false), _requesterNumber(""), _serverURL(""), _accessToken("") {}
 
 WebManager::~WebManager() {
@@ -428,15 +429,10 @@ String WebManager::generateHTMLForm() {
     html += "    <div class=\"container\">\n";
     html += "        <h1>Configuration</h1>\n";
     
-    // Display current date/time with DST offset
-    time_t now = time(nullptr);
-    int dstOffset = _configManager.getInt(ConfigManager::Param::DST_OFFSET);
-    time_t adjustedTime = now + dstOffset;
-    struct tm* timeinfo = localtime(&adjustedTime);
-    char dateBuffer[64];
-    strftime(dateBuffer, sizeof(dateBuffer), "%Y-%m-%d %H:%M:%S", timeinfo);
+    // Display current date/time from ClockManager
+    String dateTime = _clockManager.getFormattedDateTime();
     html += "        <div style=\"text-align: center; font-size: 12px; color: #444; margin-bottom: 10px;\">\n";
-    html += "            Device Date/Time: " + String(dateBuffer) + "\n";
+    html += "            Device Date/Time: " + dateTime + "\n";
     html += "        </div>\n";
     
     // Display revision and git commit info

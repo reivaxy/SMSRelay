@@ -110,15 +110,15 @@ bool ClockManager::detectNetworkTimezone() {
     
     // Query modem for current network time to extract timezone
     int year, month, day, hour, min, sec;
-    float tzquarter = 0.0f;
+    float tzOffsetHours = 0.0f;
     
-    if (_modem.getNetworkTime(&year, &month, &day, &hour, &min, &sec, &tzquarter)) {
-        // Convert quarter-hours to seconds (each quarter-hour is 900 seconds)
-        long tzOffsetSeconds = (long)(tzquarter * 900);
+    if (_modem.getNetworkTime(&year, &month, &day, &hour, &min, &sec, &tzOffsetHours)) {
+        // Convert hours to seconds (1 hour = 3600 seconds)
+        long tzOffsetSeconds = (long)(tzOffsetHours * 3600);
         _tzOffsetSec = (int)tzOffsetSeconds;
         
-        log_i("[CLOCK] Network timezone detected: %+.2f quarter-hours = %d seconds (%+.1f hours)",
-              tzquarter, _tzOffsetSec, (float)_tzOffsetSec / 3600.0f);
+        log_i("[CLOCK] Network timezone detected: %+.2f hours = %d seconds (%+.1f hours)",
+              tzOffsetHours, _tzOffsetSec, (float)_tzOffsetSec / 3600.0f);
         return true;
     }
     
@@ -186,9 +186,9 @@ bool ClockManager::syncWithMobileNetwork() {
     // TinyGsm provides getNetworkTime() but for some modems, we need to parse AT response
     // Most modems support +CCLK command which returns local time
     int year, month, day, hour, min, sec;
-    float tzquarter;  // Timezone in quarter hours (as float)
+    float tzOffsetHours;  // Timezone in hours (as float)
     
-    if (_modem.getNetworkTime(&year, &month, &day, &hour, &min, &sec, &tzquarter)) {
+    if (_modem.getNetworkTime(&year, &month, &day, &hour, &min, &sec, &tzOffsetHours)) {
         // Convert to Unix timestamp (approximate, doesn't account for timezone precisely)
         // This is a simplified conversion - for production, use a proper time library
         struct tm timeinfo = {0};
@@ -203,18 +203,18 @@ bool ClockManager::syncWithMobileNetwork() {
         
         if (epochTime > 0) {
             // Adjust for timezone offset returned by modem
-            // tzquarter is in quarter-hours (15 minutes each), so multiply by 900 to get seconds
-            long tzOffsetSeconds = (long)(tzquarter * 900);
+            // tzOffsetHours is in hours, so multiply by 3600 to get seconds
+            long tzOffsetSeconds = (long)(tzOffsetHours * 3600);
             
             // Update stored timezone for future NTP syncs
             _tzOffsetSec = (int)tzOffsetSeconds;
             
-            _epochTime = (unsigned long)(epochTime - tzOffsetSeconds);
+            _epochTime = epochTime;
             _millisecondsAtSync = millis();
             _lastNtpSyncTime = millis();
             
             log_i("[CLOCK] Mobile network time synced: %04d-%02d-%02d %02d:%02d:%02d TZ:%+.2f (epoch: %lu, offset: %d sec)",
-                  year, month, day, hour, min, sec, tzquarter, _epochTime, _tzOffsetSec);
+                  year, month, day, hour, min, sec, tzOffsetHours, _epochTime, _tzOffsetSec);
             return true;
         }
     }

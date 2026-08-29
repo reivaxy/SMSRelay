@@ -435,13 +435,13 @@ String WebManager::generateHTMLForm() {
     struct tm* timeinfo = localtime(&adjustedTime);
     char dateBuffer[64];
     strftime(dateBuffer, sizeof(dateBuffer), "%Y-%m-%d %H:%M:%S", timeinfo);
-    html += "        <div style=\"text-align: center; font-size: 12px; color: #666; margin-bottom: 10px;\">\n";
+    html += "        <div style=\"text-align: center; font-size: 12px; color: #444; margin-bottom: 10px;\">\n";
     html += "            Device Date/Time: " + String(dateBuffer) + "\n";
     html += "        </div>\n";
     
     // Display revision and git commit info
 #ifdef GIT_REV
-    html += "        <div style=\"text-align: center; font-size: 11px; color: #999; margin-bottom: 10px; font-family: monospace;\">\n";
+    html += "        <div style=\"text-align: center; font-size: 11px; color: #666; margin-bottom: 10px; font-family: monospace;\">\n";
     html += "            Rev: " + String(GIT_REV) + "\n";
     html += "        </div>\n";
 #endif

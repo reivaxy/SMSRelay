@@ -68,29 +68,7 @@ void setup()
 
     // Initialize modem hardware, serial communication, network, and SMS configuration
     if (!modem.init()) {
-        log_e("Modem initialization failed");
-        return;
-    }
-
-    // Initialize clock manager with network time (after modem connects)
-    log_i("Initializing clock from network time...");
-    if (!clockManager.init()) {
-        log_w("Failed to initialize clock from network, clock will continue with millis() offset");
-    }
-
-    // Send power-on notification to all authorized numbers
-    log_i("Sending power-on notification...");
-    String powerOnMsg = "Device powered on" 
-    #ifdef GIT_REV
-        + String(" (Rev ") + String(GIT_REV) + String(")");
-    #endif
-    
-    for (const auto &entry : phoneNumberManager.getAllNumbers()) {
-        if (sender.send(entry.number, powerOnMsg)) {
-            log_i("[OK] Power-on SMS sent to %s", entry.number.c_str());
-        } else {
-            log_i("[ERROR] Failed to send power-on SMS to %s", entry.number.c_str());
-        }
+        log_e("Modem initialization failed, will retry in main loop");
     }
 }
 
@@ -99,6 +77,43 @@ void setup()
 
 void loop()
 {
+    // Handle deferred initialization after modem is ready
+    static bool deferredInitDone = false;
+    if (!deferredInitDone && modem.isInitialized()) {
+        deferredInitDone = true;
+        
+        // Send power-on notification to all authorized numbers
+        log_i("Sending power-on notification...");
+        String powerOnMsg = "Device powered on" 
+        #ifdef GIT_REV
+            + String(" (Rev ") + String(GIT_REV) + String(")");
+        #endif
+        
+        for (const auto &entry : phoneNumberManager.getAllNumbers()) {
+            if (sender.send(entry.number, powerOnMsg)) {
+                log_i("[OK] Power-on SMS sent to %s", entry.number.c_str());
+            } else {
+                log_i("[ERROR] Failed to send power-on SMS to %s", entry.number.c_str());
+            }
+        }
+    }
+
+    // Retry clock initialization as long as it's failing
+    static bool clockInitDone = false;
+    static unsigned long lastClockInitAttempt = 0;
+    const unsigned long CLOCK_INIT_RETRY_INTERVAL = 5000;  // Retry every 5 seconds
+    
+    if (!clockInitDone && modem.isInitialized() && millis() - lastClockInitAttempt >= CLOCK_INIT_RETRY_INTERVAL) {
+        lastClockInitAttempt = millis();
+        log_i("Attempting clock initialization from network time...");
+        if (clockManager.init()) {
+            clockInitDone = true;
+            log_i("Clock initialized successfully");
+        } else {
+            log_w("Failed to initialize clock from network, will retry");
+        }
+    }
+
     // Check for Serial console commands
     console.check();
 

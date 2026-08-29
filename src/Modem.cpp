@@ -53,6 +53,11 @@ bool Modem::init()
     return true;
 }
 
+bool Modem::isInitialized()
+{
+    return _initialized;
+}
+
 TinyGsm &Modem::getModem()
 {
     return _modem;

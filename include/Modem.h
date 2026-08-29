@@ -27,6 +27,12 @@ public:
     Stream &getSerialStream();
 
     /**
+     * Check if modem is initialized and ready.
+     * Returns true if initialization succeeded, false otherwise.
+     */
+    bool isInitialized();
+
+    /**
      * Check if modem is still connected and responsive.
      * Returns true if modem is connected, false otherwise.
      */

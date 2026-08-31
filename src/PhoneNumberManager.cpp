@@ -118,7 +118,7 @@ std::vector<PhoneNumberManager::AuthorizedNumber> PhoneNumberManager::getAllNumb
 }
 
 String PhoneNumberManager::getFormattedList() {
-    String result = "Authorized numbers:\n";
+    String result = "Users:\n";
     auto numbers = getAllNumbers();
     
     for (size_t i = 0; i < numbers.size(); i++) {

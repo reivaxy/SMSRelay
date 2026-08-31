@@ -57,6 +57,8 @@ void setup()
 {
     Serial.begin(115200);
 
+    Serial.println("\n=== SMSRelay Device Started ===");  
+
     // Initialize configuration manager for persistent storage
     configManager.init();
 

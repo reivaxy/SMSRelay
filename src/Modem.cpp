@@ -36,10 +36,10 @@ bool Modem::init()
         return false;
     }
 
-    if (!waitSMSReady()) {
-        log_e("Failed to wait for SMS ready");
-        return false;
-    }
+    // if (!waitSMSReady()) {
+    //     log_e("Failed to wait for SMS ready");
+    //     return false;
+    // }
 
     if (!configureNetwork()) {
         log_e("Failed to configure network");

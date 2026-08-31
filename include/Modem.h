@@ -3,7 +3,7 @@
 #include "utilities.h"
 #include <TinyGsmClient.h>
 
-#define TEST_AT_TIMEOUT 200  // Timeout for AT command testing in milliseconds
+#define TEST_AT_TIMEOUT 400  // Timeout for AT command testing in milliseconds
 class Modem {
 public:
     Modem();

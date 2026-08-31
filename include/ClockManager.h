@@ -51,7 +51,7 @@ private:
     void disableWiFi();
 
     // Wait for WiFi connection
-    bool waitForWiFiConnection(unsigned long timeoutMs = 30000);
+    bool waitForWiFiConnection(unsigned long timeoutMs = 10000);
 
     // Calculate current time based on initial sync and elapsed milliseconds
     unsigned long calculateCurrentTime();

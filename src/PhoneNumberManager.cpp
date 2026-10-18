@@ -103,14 +103,15 @@ std::vector<PhoneNumberManager::AuthorizedNumber> PhoneNumberManager::getAllNumb
     std::vector<AuthorizedNumber> result;
 
     // Add root number
-    result.push_back({_rootNumber, Permission::ADMIN});
+    result.push_back({_rootNumber, Permission::ADMIN, getAlias(_rootNumber), isMuted(_rootNumber)});
 
     // Add stored numbers
     for (int i = 0; i < MAX_ADDITIONAL_NUMBERS; i++) {
         String storedNumber = _prefs.getString(getPhoneKey(i).c_str(), "");
         if (storedNumber.length() > 0) {
             int permValue = _prefs.getInt(getPermissionKey(i).c_str(), (int)Permission::NONE);
-            result.push_back({storedNumber, (Permission)permValue});
+            String alias = _prefs.getString(getAliasKey(i).c_str(), "");
+            result.push_back({storedNumber, (Permission)permValue, alias, isMuted(storedNumber)});
         }
     }
 

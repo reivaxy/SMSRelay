@@ -850,7 +850,8 @@ void SMSProcessor::handleWebCommand(const String &rest, const String &senderNumb
 
     if (param == "ON") {
         if (_webManager.isRunning()) {
-            _sender.send(senderNumber, "ERROR: Web server is already running");
+            String url = _webManager.getServerURL();
+            _sender.send(senderNumber, "Web server is already running:\n" + url);
             return;
         }
         if (_webManager.init(senderNumber)) {

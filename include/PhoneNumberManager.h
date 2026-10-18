@@ -21,6 +21,8 @@ public:
     struct AuthorizedNumber {
         String number;
         Permission permission;
+        String alias;
+        bool muted;
     };
 
     PhoneNumberManager(const String &rootNumber);

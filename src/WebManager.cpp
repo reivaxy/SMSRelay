@@ -5,10 +5,15 @@
 #include "AlertManager.h"
 #include "ClockManager.h"
 #include "Modem.h"
+#include "TemperatureHumidityProcessor.h"
+#include "BatteryProcessor.h"
+#include "MainPowerCheck.h"
 #include <ctime>
 
-WebManager::WebManager(ConfigManager &configManager, SMSSender &sender, PhoneNumberManager &phoneNumberManager, AlertManager &alertManager, Modem &modem, ClockManager &clockManager)
+WebManager::WebManager(ConfigManager &configManager, SMSSender &sender, PhoneNumberManager &phoneNumberManager, AlertManager &alertManager, Modem &modem, ClockManager &clockManager,
+                       TemperatureHumidityProcessor &tempHumidityProcessor, BatteryProcessor &batteryProcessor, MainPowerCheck &mainPowerCheck)
     : _server(nullptr), _configManager(configManager), _sender(sender), _phoneNumberManager(phoneNumberManager), _alertManager(alertManager), _modem(modem), _clockManager(clockManager),
+      _tempHumidityProcessor(tempHumidityProcessor), _batteryProcessor(batteryProcessor), _mainPowerCheck(mainPowerCheck),
       _isRunning(false), _requesterNumber(""), _serverURL(""), _accessToken("") {}
 
 WebManager::~WebManager() {
@@ -90,6 +95,10 @@ void WebManager::stop() {
 
 bool WebManager::isRunning() const {
     return _isRunning;
+}
+
+String WebManager::getServerURL() const {
+    return _serverURL;
 }
 
 void WebManager::check() {
@@ -225,6 +234,52 @@ void WebManager::handleClient(WiFiClient client) {
         
         // Stop web server after sending response
         stop();
+        return;
+    }
+    // Handle POST /api/ack
+    else if (method == "POST" && routePath == "/api/ack") {
+        // Read POST body
+        String postBody = "";
+        unsigned long bodyTimeout = millis() + 1000;
+        
+        while (client.connected() && millis() < bodyTimeout) {
+            if (client.available()) {
+                postBody += (char)client.read();
+            }
+        }
+
+        // Parse alert code from POST body: "code=123"
+        String code = "";
+        int codePos = postBody.indexOf("code=");
+        if (codePos >= 0) {
+            int endPos = postBody.indexOf('&', codePos);
+            if (endPos < 0) endPos = postBody.length();
+            code = postBody.substring(codePos + 5, endPos);
+            code.trim();
+        }
+        
+        String response;
+        if (code.length() == 0) {
+            log_w("[WEB] ACK request missing code");
+            response = "{\"status\":\"error\",\"message\":\"Missing alert code\"}";
+        } else {
+            log_i("[WEB] ACK request for code: %s", code.c_str());
+            if (_alertManager.handleACK(_requesterNumber, code)) {
+                response = "{\"status\":\"ok\",\"message\":\"Alert acknowledged\"}";
+            } else {
+                response = "{\"status\":\"error\",\"message\":\"Unknown alert code\"}";
+            }
+        }
+        
+        client.println("HTTP/1.1 200 OK");
+        client.println("Content-Type: application/json");
+        client.println("Content-Length: " + String(response.length()));
+        client.println("Connection: close");
+        client.println();
+        client.println(response);
+        delay(100);
+        client.stop();
+        log_i("[WEB] ACK response sent");
         return;
     }
     // 404
@@ -433,6 +488,43 @@ String WebManager::generateHTMLForm() {
     html += generateAlertsHTML();
     html += "        </div>\n";
     
+    // Current Levels section
+    html += "        <div class=\"section sections-full\" style=\"border-left-color: #17a2b8; background: #f0f7fb;\">\n";
+    html += "            <div class=\"section-title\" style=\"color: #17a2b8;\">Current Levels</div>\n";
+    html += generateLevelsHTML();
+    html += "        </div>\n";
+    
+    // Configured Phone Numbers section
+    html += "        <div class=\"section sections-full\" style=\"border-left-color: #6f42c1; background: #f8f5fc;\">\n";
+    html += "            <div class=\"section-title\" style=\"color: #6f42c1;\">Configured Phone Numbers</div>\n";
+    std::vector<PhoneNumberManager::AuthorizedNumber> numbers = _phoneNumberManager.getAllNumbers();
+    if (numbers.empty()) {
+        html += "            <div style=\"padding: 10px; color: #666;\">No phone numbers configured</div>\n";
+    } else {
+        html += "            <div style=\"display: flex; flex-direction: column; gap: 8px;\">\n";
+        for (const auto& num : numbers) {
+            String permission = (num.permission == PhoneNumberManager::Permission::ADMIN) ? "ADMIN" : 
+                               (num.permission == PhoneNumberManager::Permission::READ) ? "READ-ONLY" : "NONE";
+            String permissionColor = (num.permission == PhoneNumberManager::Permission::ADMIN) ? "#d32f2f" : "#1976d2";
+            html += "                <div style=\"display: flex; justify-content: space-between; align-items: center; padding: 8px; background: white; border-radius: 4px; border-left: 3px solid " + permissionColor + ";\">\n";
+            html += "                    <div style=\"flex: 1;\">\n";
+            html += "                        <div style=\"font-family: monospace;\">" + num.number + "</div>\n";
+            if (num.alias.length() > 0) {
+                html += "                        <div style=\"font-size: 12px; color: #666; margin-top: 2px;\">" + num.alias + "</div>\n";
+            }
+            html += "                    </div>\n";
+            html += "                    <div style=\"display: flex; gap: 4px; align-items: center;\">\n";
+            if (num.muted) {
+                html += "                        <span style=\"background: #ff9800; color: white; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: bold;\">MUTED</span>\n";
+            }
+            html += "                        <span style=\"background: " + permissionColor + "; color: white; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: bold;\">" + permission + "</span>\n";
+            html += "                    </div>\n";
+            html += "                </div>\n";
+        }
+        html += "            </div>\n";
+    }
+    html += "        </div>\n";
+    
     html += "        <form id=\"configForm\" data-token=\"" + _accessToken + "\">\n";
     html += "        <script>const ACCESS_TOKEN = '" + _accessToken + "';</script>\n";
     
@@ -491,8 +583,9 @@ String WebManager::generateHTMLForm() {
     html += "                    <div class=\"form-group\">\n";
     html += "                        <label>Resend Delay (minutes): <input type=\"number\" name=\"RESEND_MINS\" value=\"" + String(_configManager.getInt(ConfigManager::Param::ALERT_RESEND_DELAY_MINS)) + "\"></label>\n";
     html += "                    </div>\n";
-    html += "                    <div class=\"form-group\">\n";
-    html += "                        <label>SMS Send Disabled (0=enabled, 1=disabled): <input type=\"number\" name=\"SMS_DISABLED\" min=\"0\" max=\"1\" value=\"" + String(_configManager.getInt(ConfigManager::Param::SMS_SEND_DISABLED)) + "\"></label>\n";
+    html += "                    <div class=\"form-group\" style=\"display: flex; align-items: center;\">\n";
+    html += "                        <input type=\"checkbox\" id=\"SMS_DISABLED\" name=\"SMS_DISABLED\" value=\"1\" style=\"margin-right: 8px; width: auto; margin-bottom: 0;\" " + (String(_configManager.getInt(ConfigManager::Param::SMS_SEND_DISABLED)) == "1" ? String("checked") : String("")) + ">\n";
+    html += "                        <label for=\"SMS_DISABLED\" style=\"margin-bottom: 0; font-weight: normal;\">Disable SMS notifications</label>\n";
     html += "                    </div>\n";
     html += "                </div>\n";
 
@@ -537,6 +630,11 @@ String WebManager::generateHTMLForm() {
     html += "            const params = new URLSearchParams();\n";
     html += "            for (let [key, value] of formData) {\n";
     html += "                if (value) params.append(key, value);\n";
+    html += "            }\n";
+    html += "            // Handle SMS_DISABLED checkbox: send 0 if unchecked, 1 if checked\n";
+    html += "            const smsCheckbox = document.getElementById('SMS_DISABLED');\n";
+    html += "            if (smsCheckbox) {\n";
+    html += "                params.set('SMS_DISABLED', smsCheckbox.checked ? '1' : '0');\n";
     html += "            }\n";
     html += "            try {\n";
     html += "                const response = await fetch('/' + ACCESS_TOKEN + '/api/config', {\n";
@@ -612,6 +710,42 @@ String WebManager::generateHTMLForm() {
     html += "                statusDiv.textContent = 'Network error: ' + error.message;\n";
     html += "                statusDiv.style.display = 'block';\n";
     html += "            }\n";
+    html += "        });\n";
+    html += "        \n";
+    html += "        // Handle ACK buttons for alerts\n";
+    html += "        document.querySelectorAll('.ack-btn').forEach(btn => {\n";
+    html += "            btn.addEventListener('click', async function(e) {\n";
+    html += "                e.preventDefault();\n";
+    html += "                const code = this.getAttribute('data-code');\n";
+    html += "                const params = new URLSearchParams();\n";
+    html += "                params.append('code', code);\n";
+    html += "                try {\n";
+    html += "                    const response = await fetch('/' + ACCESS_TOKEN + '/api/ack', {\n";
+    html += "                        method: 'POST',\n";
+    html += "                        body: params.toString(),\n";
+    html += "                        headers: {'Content-Type': 'application/x-www-form-urlencoded'}\n";
+    html += "                    });\n";
+    html += "                    const text = await response.text();\n";
+    html += "                    const result = JSON.parse(text);\n";
+    html += "                    const statusDiv = document.getElementById('status');\n";
+    html += "                    if (result.status === 'ok') {\n";
+    html += "                        this.style.display = 'none';\n";
+    html += "                        statusDiv.className = 'status success';\n";
+    html += "                        statusDiv.textContent = 'Alert [' + code + '] acknowledged';\n";
+    html += "                        statusDiv.style.display = 'block';\n";
+    html += "                        setTimeout(() => location.reload(), 1500);\n";
+    html += "                    } else {\n";
+    html += "                        statusDiv.className = 'status error';\n";
+    html += "                        statusDiv.textContent = 'Error: ' + result.message;\n";
+    html += "                        statusDiv.style.display = 'block';\n";
+    html += "                    }\n";
+    html += "                } catch (error) {\n";
+    html += "                    const statusDiv = document.getElementById('status');\n";
+    html += "                    statusDiv.className = 'status error';\n";
+    html += "                    statusDiv.textContent = 'Network error: ' + error.message;\n";
+    html += "                    statusDiv.style.display = 'block';\n";
+    html += "                }\n";
+    html += "            });\n";
     html += "        });\n";
     html += "    </script>\n";
     html += "</body>\n</html>\n";
@@ -707,23 +841,99 @@ String WebManager::generateAlertsHTML() {
             
             // Format as HTML alert item
             html += "            <div class=\"alert-item\">\n";
-            html += "                <span class=\"alert-code\">[" + code + "]</span> ";
+            html += "                <div style=\"display: flex; justify-content: space-between; align-items: flex-start;\">\n";
+            html += "                    <div style=\"flex: 1;\">\n";
+            html += "                        <span class=\"alert-code\">[" + code + "]</span> ";
             html += "<span class=\"alert-title\">" + title + "</span>";
             if (ackInfo.length() > 0) {
                 html += " <span class=\"alert-ack\">" + ackInfo + "</span>";
             }
             html += "\n";
             if (cause.length() > 0) {
-                html += "                <div class=\"alert-cause\">Cause: " + cause + "</div>\n";
+                html += "                        <div class=\"alert-cause\">Cause: " + cause + "</div>\n";
             }
             if (timeStr.length() > 0) {
-                html += "                <div class=\"alert-time\">Time: " + timeStr + "</div>\n";
+                html += "                        <div class=\"alert-time\">Time: " + timeStr + "</div>\n";
             }
+            html += "                    </div>\n";
+            if (ackInfo.length() == 0) {
+                html += "                    <button type=\"button\" class=\"ack-btn\" data-code=\"" + code + "\" style=\"margin-left: 8px; padding: 1px 3px; background: #28a745; color: white; border: none; border-radius: 2px; font-size: 9px; line-height: 1; cursor: pointer; white-space: nowrap; width: auto; min-width: auto; flex-shrink: 0;\">ACK</button>\n";
+            }
+            html += "                </div>\n";
             html += "            </div>\n";
         }
         
         currentPos = lineEnd + 1;
     }
+    
+    return html;
+}
+
+String WebManager::generateLevelsHTML() {
+    String html = "";
+    
+    // Temperature status
+    float temp = _tempHumidityProcessor.getTemperature();
+    float tempHigh = _configManager.getFloat(ConfigManager::Param::TEMP_HIGH);
+    float tempLow = _configManager.getFloat(ConfigManager::Param::TEMP_LOW);
+    
+    html += "            <div style=\"margin: 4px 0; padding: 6px; background: white; border-radius: 4px; border-left: 3px solid #17a2b8;\">\n";
+    html += "                <span style=\"font-weight: bold; color: #333;\">Temperature:</span> " + String(temp, 1) + "°C\n";
+    if (temp > tempHigh) {
+        html += " <span style=\"background: #f8d7da; color: #721c24; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 11px;\">[HIGH]</span>\n";
+    } else if (temp < tempLow) {
+        html += " <span style=\"background: #cfe2ff; color: #084298; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 11px;\">[LOW]</span>\n";
+    } else {
+        html += " <span style=\"background: #d4edda; color: #155724; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 11px;\">[OK]</span>\n";
+    }
+    html += "            </div>\n";
+    
+    // Humidity status
+    float humidity = _tempHumidityProcessor.getHumidity();
+    float humidityHigh = _configManager.getFloat(ConfigManager::Param::HUMIDITY_HIGH);
+    float humidityLow = _configManager.getFloat(ConfigManager::Param::HUMIDITY_LOW);
+    
+    html += "            <div style=\"margin: 4px 0; padding: 6px; background: white; border-radius: 4px; border-left: 3px solid #17a2b8;\">\n";
+    html += "                <span style=\"font-weight: bold; color: #333;\">Humidity:</span> " + String(humidity, 1) + "%\n";
+    if (humidity > humidityHigh) {
+        html += " <span style=\"background: #f8d7da; color: #721c24; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 11px;\">[HIGH]</span>\n";
+    } else if (humidity < humidityLow) {
+        html += " <span style=\"background: #cfe2ff; color: #084298; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 11px;\">[LOW]</span>\n";
+    } else {
+        html += " <span style=\"background: #d4edda; color: #155724; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 11px;\">[OK]</span>\n";
+    }
+    html += "            </div>\n";
+    
+    // Battery status
+#ifdef BOARD_BAT_ADC_PIN
+    int batAdcValue = BatteryProcessor::readBatADC();
+    int batAdcThreshold = _configManager.getInt(ConfigManager::Param::BAT_ADC_THRESHOLD);
+    int batAdcNearEmpty = _configManager.getInt(ConfigManager::Param::BAT_ADC_NEAR_EMPTY);
+    
+    html += "            <div style=\"margin: 4px 0; padding: 6px; background: white; border-radius: 4px; border-left: 3px solid #17a2b8;\">\n";
+    html += "                <span style=\"font-weight: bold; color: #333;\">Battery:</span> " + String(batAdcValue) + "\n";
+    if (batAdcValue < batAdcNearEmpty) {
+        html += " <span style=\"background: #f8d7da; color: #721c24; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 11px;\">[NEAR EMPTY]</span>\n";
+    } else if (batAdcValue < batAdcThreshold) {
+        html += " <span style=\"background: #fff3cd; color: #664d03; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 11px;\">[USB]</span>\n";
+    } else {
+        html += " <span style=\"background: #d4edda; color: #155724; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 11px;\">[OK]</span>\n";
+    }
+    html += "            </div>\n";
+#endif
+    
+    // Main power status
+    int mainAdcValue = MainPowerCheck::readGPIO00ADC();
+    int powerAdcThreshold = _configManager.getInt(ConfigManager::Param::POWER_ADC_THRESHOLD);
+    
+    html += "            <div style=\"margin: 4px 0; padding: 6px; background: white; border-radius: 4px; border-left: 3px solid #17a2b8;\">\n";
+    html += "                <span style=\"font-weight: bold; color: #333;\">Main Power:</span> " + String(mainAdcValue) + "\n";
+    if (mainAdcValue < powerAdcThreshold) {
+        html += " <span style=\"background: #f8d7da; color: #721c24; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 11px;\">[LOW]</span>\n";
+    } else {
+        html += " <span style=\"background: #d4edda; color: #155724; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 11px;\">[OK]</span>\n";
+    }
+    html += "            </div>\n";
     
     return html;
 }

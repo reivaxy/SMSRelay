@@ -10,10 +10,14 @@ class PhoneNumberManager;
 class AlertManager;
 class Modem;
 class ClockManager;
+class TemperatureHumidityProcessor;
+class BatteryProcessor;
+class MainPowerCheck;
 
 class WebManager {
 public:
-    WebManager(ConfigManager &configManager, SMSSender &sender, PhoneNumberManager &phoneNumberManager, AlertManager &alertManager, Modem &modem, ClockManager &clockManager);
+    WebManager(ConfigManager &configManager, SMSSender &sender, PhoneNumberManager &phoneNumberManager, AlertManager &alertManager, Modem &modem, ClockManager &clockManager,
+               TemperatureHumidityProcessor &tempHumidityProcessor, BatteryProcessor &batteryProcessor, MainPowerCheck &mainPowerCheck);
     ~WebManager();
 
     // Start web server and connect to home WiFi
@@ -26,6 +30,9 @@ public:
 
     // Check if web server is currently running
     bool isRunning() const;
+
+    // Get the web server URL (only valid when server is running)
+    String getServerURL() const;
 
     // Call this from loop() to handle incoming web requests
     void check();
@@ -48,6 +55,9 @@ private:
     
     // Generate HTML for pending alerts display
     String generateAlertsHTML();
+    
+    // Generate HTML for current sensor levels
+    String generateLevelsHTML();
 
     WiFiServer              *_server;
     ConfigManager           &_configManager;
@@ -56,6 +66,9 @@ private:
     AlertManager            &_alertManager;
     Modem                   &_modem;
     ClockManager            &_clockManager;
+    TemperatureHumidityProcessor &_tempHumidityProcessor;
+    BatteryProcessor        &_batteryProcessor;
+    MainPowerCheck          &_mainPowerCheck;
     bool                     _isRunning;
     String                   _requesterNumber;
     String                   _serverURL;

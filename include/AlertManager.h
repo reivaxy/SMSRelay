@@ -32,6 +32,10 @@ public:
     // Returns the 3-digit alert code
     String sendAlert(const String &title, const String &message, const String &cause = "", AlertLevel level = AlertLevel::PRIORITY_NORMAL);
 
+    // Send a one-off informational notification (no ACK, no resend) via SMS to all
+    // non-muted numbers and via Pushover if configured
+    void sendNotification(const String &title, const String &message);
+
     // Handle incoming ACK from a phone number (format: "ACK <code>")
     // Returns true if ACK was processed successfully
     bool handleACK(const String &senderNumber, const String &code);

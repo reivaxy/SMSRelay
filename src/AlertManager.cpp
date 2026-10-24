@@ -71,6 +71,30 @@ String AlertManager::sendAlert(const String &title, const String &message, const
     return code;
 }
 
+void AlertManager::sendNotification(const String &title, const String &message) {
+    if (_pushover.isConfigured()) {
+        if (!_pushover.send(title, message)) {
+            log_w("[NOTIFY] Failed to send Pushover notification '%s': %s", title.c_str(), _pushover.getLastError().c_str());
+        } else {
+            log_i("[NOTIFY] Pushover notification sent: %s", title.c_str());
+        }
+    }
+
+    auto allNumbers = _phoneNumberManager.getAllNumbers();
+    for (const auto &entry : allNumbers) {
+        if (_phoneNumberManager.isMuted(entry.number)) {
+            log_d("[NOTIFY] Skipping notification '%s' to muted number %s", title.c_str(), entry.number.c_str());
+            continue;
+        }
+
+        if (_sender.send(entry.number, message)) {
+            log_i("[NOTIFY] Notification '%s' sent to %s", title.c_str(), entry.number.c_str());
+        } else {
+            log_w("[NOTIFY] Failed to send notification '%s' to %s", title.c_str(), entry.number.c_str());
+        }
+    }
+}
+
 void AlertManager::sendAlertToAll(Alert &alert) {
     unsigned long now = millis();
     alert.lastSent = now;

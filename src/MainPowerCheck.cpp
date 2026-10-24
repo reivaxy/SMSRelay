@@ -41,18 +41,13 @@ void MainPowerCheck::check()
     else if (adcValue >= powerAdcThreshold && _lowPowerAlertSent && !_normalPowerAlertSent) {
         log_i("Main power restored (MainAdcPin=%d), sending notification...", adcValue);
         String notifyMsg = "Main power level restored (" + String(adcValue) + ")";
-        auto numbers = _phoneNumberManager.getAllNumbers();
-        for (const auto &entry : numbers) {
-            if (!_phoneNumberManager.isMuted(entry.number)) {
-                if (_sender.send(entry.number, notifyMsg)) {
-                    log_i("[OK] Power restored SMS sent to %s", entry.number.c_str());
-                } else {
-                    log_i("[ERROR] Failed to send power restored SMS to %s", entry.number.c_str());
-                }
-            } else {
-                log_i("[MUTED] Power restored SMS not sent to %s (muted)", entry.number.c_str());
-            }
+        String notifyTitle = "Main Power Restored";
+        if (_lowPowerAlertCode.length() > 0) {
+            notifyTitle += " [" + _lowPowerAlertCode + "]";
+            notifyMsg = "[" + _lowPowerAlertCode + "] " + notifyMsg;
+            _lowPowerAlertCode = "";
         }
+        _alertManager.sendNotification(notifyTitle, notifyMsg);
         _normalPowerAlertSent = true;
         _lowPowerAlertSent = false;
     }

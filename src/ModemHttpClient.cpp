@@ -6,7 +6,9 @@ ModemHttpClient::ModemHttpClient(Modem &modem)
 }
 
 bool ModemHttpClient::isReady() const {
-    return _modem.isInitialized() && _modem.isConnected() && _modem.isGprsConnected();
+    // GPRS is intentionally not checked here: requests call ensureGprsConnected(),
+    // which (re)activates the data connection on demand.
+    return _modem.isInitialized() && _modem.isConnected();
 }
 
 bool ModemHttpClient::configureSslCertValidation() {
@@ -48,16 +50,25 @@ bool ModemHttpClient::ensureGprsConnected() {
         return true;
     }
 
-    // GPRS not connected, attempt to activate it through Modem
+    // GPRS not connected, attempt to activate it through Modem (with retries, as the
+    // data connection can take a few seconds to come up, e.g. after the modem was busy
+    // sending SMS or the network just came back)
     log_w("ModemHttpClient: GPRS not connected, attempting activation...");
-    if (!_modem.activateGprs()) {
-        _lastError = "Failed to activate GPRS data connection";
-        log_e("ModemHttpClient: %s", _lastError.c_str());
-        return false;
+    const int maxAttempts = 3;
+    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+        if (_modem.activateGprs()) {
+            log_i("ModemHttpClient: GPRS connection activated (attempt %d)", attempt);
+            return true;
+        }
+        log_w("ModemHttpClient: GPRS activation attempt %d/%d failed", attempt, maxAttempts);
+        if (attempt < maxAttempts) {
+            delay(3000);
+        }
     }
 
-    log_i("ModemHttpClient: GPRS connection activated");
-    return true;
+    _lastError = "Failed to activate GPRS data connection";
+    log_e("ModemHttpClient: %s", _lastError.c_str());
+    return false;
 }
 
 String ModemHttpClient::getLastError() const {

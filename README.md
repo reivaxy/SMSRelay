@@ -5,13 +5,13 @@ of main power failure, in which case the home wifi is no longer available to sen
 
 It also monitors room temperature and humidity and can send alerts when configuratble thresholds are reached.
 
-Other devices, each monitoring one aquarium, will ultimately also use this device to send alerts by SMS (light issue, 
+Other devices, each monitoring one aquarium, will ultimately also use this device to send alerts by SMS and push notifications (light issue, 
 water level or temperature issue, ...)
 
 Years ago I designed an [arduino based device wich was doing that](https://github.com/reivaxy/aquaMonitor) that sent 
 text message for various alerts, including main power outage, and I noticed it would occasionaly receive text messages 
 from the mobile provider that I would never read, so this new device will forward them to your own mobile, and then 
-adds a few features. This device no longer works since 2G networks have been discontinued
+adds a few features. This device no longer works since 2G networks have been discontinued.
 
 Using a LILYGO T-A7670E R2 board with a nano sim with its own phone number, this program will forward to your phone 
 any SMS it receives, preceded by a message saying what number sent it.
@@ -21,7 +21,7 @@ any SMS it receives, preceded by a message saying what number sent it.
 Also, if you send it a message starting by "for:" followed by another number then it will send the rest of the message 
 to that number, which will then appear to have been sent by this device and not your phone.
 
-But this only works for messages sent from *your* phone, to avoid other people sending messages.
+But this only works for messages sent from *your* phone (configured as ROOT), to avoid other people sending messages.
 
 This allows you to not miss any message in case your SMS enabled home automation system gets an unexpected message 
 (from the provider, or because you are repurposing an old SIM card, or whatever mischief you are about to commit), 
@@ -44,13 +44,32 @@ high/low thresholds. Alerts are sent when values exceed configured limits
 
 ### Alert System
 - **Alert Codes**: Each alert is assigned a unique 3-digit code (000-999) for easy reference
-- **Alert Acknowledgment**: Authorized users can acknowledge alerts by sending `ACK <code>`. When one user 
+- **Alert Acknowledgment**: Authorized users can acknowledge alerts by sending an SMS with `ACK <code>`. When one user 
 acknowledges, all others receive a notification
 - **Alert Muting**: Mute specific phone numbers to prevent them from receiving alerts while still allowing 
 them to send commands
 - **Automatic Resending**: Alerts automatically resend at configurable intervals (default: 5 minutes) until 
 acknowledged by all authorized users
 - **Alert Clearing**: Alerts can be manually cleared.
+
+### Push Notifications (Pushover)
+- **Pushover Integration**: In addition to SMS, alerts and notifications can be pushed to your phone through the
+ [Pushover](https://pushover.net) service and App. Notifications are sent over the modem's 4G data connection, so they
+ work even when the home wifi is down (e.g. during a main power failure)
+ 
+ - **Alerts**: Every new alert, and every automatic resend of an unacknowledged alert, is also pushed, with the title
+ followed by its 3-digit code and the cause in the message body
+- **Notifications**: Informational messages (e.g. "Main power restored") are also pushed
+- **NOTIF command**: Send a custom push notification with `NOTIF <message>`. The title shows who sent it (alias or number)
+- **Optional**: Pushover is only used when both tokens are configured. Leave them empty to disable it, SMS alerts
+ are not affected
+- **Muting**: Muting a phone number only affects SMS, Pushover notifications are always sent when configured. They can be silent in the Pushover app on the receiver.
+
+To set it up:
+1. Create an account on [pushover.net](https://pushover.net) and note your **User Key**
+2. Create an application on Pushover to get an **API Token**
+3. Set `PUSHOVER_USER` and `PUSHOVER_TOKEN` using `CONFIG` (SMS or serial console) or the web interface
+ (`WEB ON`). Tokens are masked when displayed in the web form
 
 ### SMS Forwarding
 - **Automatic Forwarding**: All non-command incoming SMS messages are automatically forwarded to "root"" phone
@@ -69,6 +88,7 @@ acknowledged by all authorized users
   - Battery thresholds (BAT_THRESHOLD, BAT_NEAR_EMPTY)
   - Power detection threshold (POWER_THRESHOLD)
   - Alert resend interval (RESEND_MINS)
+  - Pushover credentials (PUSHOVER_USER, PUSHOVER_TOKEN)
 
 ### Phone Number Management
 - **Authorized Numbers**: Manage a list of authorized phone numbers with different permission levels
@@ -93,6 +113,7 @@ Serial console now accepts all the messages that can be sent by SMS, it has ROOT
 - **`HELP`** - Display available commands as well as config parameters
 - **`MUTE ME`** - No longer send message to my number
 - **`UNMUTE ME`** - Resume sending message to my number
+- **`NOTIF <message>`** - Send a push notification through Pushover (requires Pushover to be configured)
 
 
 ### Admin-Only Commands
@@ -124,6 +145,7 @@ Serial console now accepts all the messages that can be sent by SMS, it has ROOT
     - `CONFIG TEMP_HIGH 28.5` - Set maximum temperature threshold
     - `CONFIG BAT_THRESHOLD 2400` - Set battery warning level
     - `CONFIG RESEND_MINS 10` - Set alert resend interval to 10 minutes
+    - `CONFIG PUSHOVER_USER <user key>` / `CONFIG PUSHOVER_TOKEN <api token>` - Set Pushover credentials
 
 #### System Management
 - **`OTA`** - Initiate Over-The-Air (OTA) firmware update mode
@@ -137,6 +159,6 @@ Serial console now accepts all the messages that can be sent by SMS, it has ROOT
 - **`WEB <ON|OFF>`** - Control the web configuration interface
   - **`WEB ON`** - Start web server for configuration via browser
     - Connects to home WiFi and sends you the access URL via SMS
-    - Provides a secure web form to adjust all configuration parameters
+    - Provides a secure web form to adjust all configuration parameters, including Pushover tokens
   - **`WEB OFF`** - Stop the web server and disconnect from WiFi
 

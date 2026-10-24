@@ -39,6 +39,18 @@ public:
     bool isConnected();
 
     /**
+     * Check if GPRS/data connection is active.
+     * Returns true if GPRS is connected for data operations, false otherwise.
+     */
+    bool isGprsConnected();
+
+    /**
+     * Activate GPRS/data connection for HTTP and other data operations.
+     * Returns true if activation successful or already connected, false on failure.
+     */
+    bool activateGprs();
+
+    /**
      * Attempt to reconnect the modem.
      * Returns true if reconnection successful, false otherwise.
      */

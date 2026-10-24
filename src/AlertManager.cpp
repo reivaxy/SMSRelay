@@ -1,10 +1,14 @@
 #include "AlertManager.h"
+#include "SMSSender.h"
 #include "ConfigManager.h"
+#include "PhoneNumberManager.h"
+#include "ClockManager.h"
+#include "PushoverNotifier.h"
 #include "utilities.h"
 #include <random>
 
-AlertManager::AlertManager(SMSSender &sender, ConfigManager &configManager, PhoneNumberManager &phoneNumberManager, ClockManager &clockManager)
-    : _sender(sender), _configManager(configManager), _phoneNumberManager(phoneNumberManager), _clockManager(clockManager), _lastCheck(0) {
+AlertManager::AlertManager(SMSSender &sender, ConfigManager &configManager, PhoneNumberManager &phoneNumberManager, ClockManager &clockManager, PushoverNotifier &pushover)
+    : _sender(sender), _configManager(configManager), _phoneNumberManager(phoneNumberManager), _clockManager(clockManager), _pushover(pushover), _lastCheck(0) {
     log_i("[ALERT] AlertManager initialized");
 }
 
@@ -73,6 +77,20 @@ void AlertManager::sendAlertToAll(Alert &alert) {
     
     String message = "[" + alert.code + "] " + alert.title + "\n" + alert.message + 
                     "\nReply: ACK " + alert.code;
+    
+    // Also send Pushover notification if configured
+    if (_pushover.isConfigured()) {
+        String pushoverTitle = alert.title + " [" + alert.code + "]";
+        String pushoverMessage = alert.message;
+        if (alert.cause.length() > 0) {
+            pushoverMessage += "\nCause: " + alert.cause;
+        }
+        if (!_pushover.send(pushoverTitle, pushoverMessage)) {
+            log_w("[ALERT] Failed to send Pushover notification for alert %s: %s", alert.code.c_str(), _pushover.getLastError().c_str());
+        } else {
+            log_i("[ALERT] Pushover notification sent for alert %s", alert.code.c_str());
+        }
+    }
     
     auto allNumbers = _phoneNumberManager.getAllNumbers();
     int sentCount = 0;

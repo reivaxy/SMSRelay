@@ -1,10 +1,13 @@
 #pragma once
 #include <Arduino.h>
 #include <vector>
-#include "SMSSender.h"
-#include "ConfigManager.h"
-#include "PhoneNumberManager.h"
-#include "ClockManager.h"
+
+// Forward declarations
+class SMSSender;
+class ConfigManager;
+class PhoneNumberManager;
+class ClockManager;
+class PushoverNotifier;
 
 // Manages alert sending with acknowledgment (ACK) system.
 // - Each alert gets a unique 3-digit random code
@@ -21,7 +24,7 @@ public:
         PRIORITY_HIGH    // Should always be sent? (future feature)
     };
 
-    AlertManager(SMSSender &sender, ConfigManager &configManager, PhoneNumberManager &phoneNumberManager, ClockManager &clockManager);
+    AlertManager(SMSSender &sender, ConfigManager &configManager, PhoneNumberManager &phoneNumberManager, ClockManager &clockManager, PushoverNotifier &pushover);
     ~AlertManager();
 
     // Send or queue an alert with automatic code generation
@@ -72,6 +75,7 @@ private:
     ConfigManager          &_configManager;
     PhoneNumberManager     &_phoneNumberManager;
     ClockManager           &_clockManager;
+    PushoverNotifier       &_pushover;
     std::vector<Alert>     _pendingAlerts;
     unsigned long          _lastCheck;
 };

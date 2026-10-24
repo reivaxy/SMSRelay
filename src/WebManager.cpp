@@ -403,6 +403,13 @@ String WebManager::handleFormSubmit(const String &postData) {
                 break;
             }
 
+            case ConfigManager::Param::PUSHOVER_USER_TOKEN:
+            case ConfigManager::Param::PUSHOVER_API_TOKEN: {
+                _configManager.setStringParam(cfgParam, paramValue);
+                success = true;
+                break;
+            }
+
             default:
                 errorCount++;
                 errors += "Unsupported: " + paramName + "; ";
@@ -608,6 +615,20 @@ String WebManager::generateHTMLForm() {
     html += "                    </div>\n";
     html += "                    <div class=\"form-group\">\n";
     html += "                        <label>Password: <input type=\"password\" name=\"WIFI_PWD\" placeholder=\"Leave empty to keep current\"></label>\n";
+    html += "                    </div>\n";
+    html += "                </div>\n";
+
+    // Pushover Notifier section (full width)
+    html += "                <div class=\"section sections-full\">\n";
+    html += "                    <div class=\"section-title\">Pushover Notifications</div>\n";
+    html += "                    <div class=\"form-group\">\n";
+    html += "                        <label>User Token: <input type=\"text\" name=\"PUSHOVER_USER\" value=\"" + _configManager.getStringParam(ConfigManager::Param::PUSHOVER_USER_TOKEN) + "\" placeholder=\"Leave empty to disable\"></label>\n";
+    html += "                    </div>\n";
+    html += "                    <div class=\"form-group\">\n";
+    html += "                        <label>API Token: <input type=\"text\" name=\"PUSHOVER_TOKEN\" value=\"" + _configManager.getStringParam(ConfigManager::Param::PUSHOVER_API_TOKEN) + "\" placeholder=\"Leave empty to disable\"></label>\n";
+    html += "                    </div>\n";
+    html += "                    <div style=\"font-size: 11px; color: #666; margin-top: 5px;\">\n";
+    html += "                        Get tokens from <a href=\"https://pushover.net\" target=\"_blank\" style=\"color: #007bff; text-decoration: none;\">pushover.net</a>\n";
     html += "                    </div>\n";
     html += "                </div>\n";
     

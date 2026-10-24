@@ -8,16 +8,17 @@
 #include "OTAManager.h"
 #include "WebManager.h"
 #include "Modem.h"
+#include "PushoverNotifier.h"
 #include "utilities.h"
 
 SMSProcessor::SMSProcessor(SMSSender &sender, const String &targetNumber, SMSReader &reader, 
                            MainPowerCheck &mainPowerCheck, BatteryProcessor &batteryProcessor, TemperatureHumidityProcessor &tempHumidityProcessor,
                            ConfigManager &configManager, PhoneNumberManager &phoneNumberManager, AlertManager &alertManager, ClockManager &clockManager,
-                           OTAManager &otaManager, WebManager &webManager, Modem &modem)
+                           OTAManager &otaManager, WebManager &webManager, Modem &modem, PushoverNotifier &pushover)
     : _sender(sender), _targetNumber(targetNumber), _reader(reader), _mainPowerCheck(mainPowerCheck),
       _batteryProcessor(batteryProcessor), _tempHumidityProcessor(tempHumidityProcessor), 
       _configManager(configManager), _phoneNumberManager(phoneNumberManager), _alertManager(alertManager), _clockManager(clockManager),
-      _otaManager(otaManager), _webManager(webManager), _modem(modem) {}
+      _otaManager(otaManager), _webManager(webManager), _modem(modem), _pushover(pushover) {}
 
 void SMSProcessor::process(const ReceivedSMS &sms)
 {
@@ -155,6 +156,9 @@ void SMSProcessor::process(const ReceivedSMS &sms)
     }
     else if (textUpper.startsWith("ACK ")) {
         handleACKCommand(sms.text.substring(4), sms.number);
+    }
+    else if (textUpper.startsWith("NOTIF ")) {
+        handleNotifCommand(sms.text.substring(6), sms.number);
     }
 }
 
@@ -664,6 +668,7 @@ void SMSProcessor::handleHelpCommand(const String &senderNumber) {
     helpMsg1 += "LISTALERTS - List pending alerts\n";
     helpMsg1 += "CLEAR - Reset alerts\n";
     helpMsg1 += "ACK <code> - Acknowledge alert\n";
+    helpMsg1 += "NOTIF <message> - Push notification\n";
     helpMsg1 += "MUTE me - Mute your alerts\n";
     helpMsg1 += "UNMUTE me - Unmute your alerts\n";
     
@@ -874,5 +879,44 @@ void SMSProcessor::handleWebCommand(const String &rest, const String &senderNumb
     }
 }
 
+void SMSProcessor::handleNotifCommand(const String &rest, const String &senderNumber) {
+    String message = rest;
+    message.trim();
+
+    if (message.length() == 0) {
+        log_w("[CMD] NOTIF: empty message from %s", senderNumber.c_str());
+        _sender.send(senderNumber, "ERROR: NOTIF requires a message");
+        return;
+    }
+
+    if (!_pushover.isConfigured()) {
+        log_w("[CMD] NOTIF: Pushover not configured");
+        _sender.send(senderNumber, "ERROR: Pushover not configured. Set user token and API token.");
+        return;
+    }
+
+    log_i("[CMD] NOTIF: Sending message from %s: %s", senderNumber.c_str(), message.c_str());
+
+    // Send the notification with title based on who sent it
+    String title = "SMS Relay";
+    if (senderNumber == "CONSOLE") {
+        title = "Console Notification";
+    } else {
+        String alias = _phoneNumberManager.getAlias(senderNumber);
+        if (!alias.isEmpty()) {
+            title = "From: " + alias;
+        } else {
+            title = "From: " + senderNumber;
+        }
+    }
+
+    if (_pushover.send(title, message)) {
+        log_i("[OK] Pushover notification sent");
+        _sender.send(senderNumber, "OK: Notification sent");
+    } else {
+        log_e("[ERROR] Failed to send Pushover notification: %s", _pushover.getLastError().c_str());
+        _sender.send(senderNumber, "ERROR: Failed to send notification: " + _pushover.getLastError());
+    }
+}
 
 

@@ -14,6 +14,7 @@ class ClockManager;
 class OTAManager;
 class WebManager;
 class Modem;
+class PushoverNotifier;
 
 // Handles command SMS received from authorized phone numbers.
 // Supported commands:
@@ -24,6 +25,7 @@ class Modem;
 //   "LISTPHONES" - list all authorized phone numbers
 //   "CLEAR" - reset all alert SMS sent flags
 //   "HELP" - display list of available commands
+//   "NOTIF <message>" - send a push notification via Pushover
 //
 //   ADMIN Permission Only:
 //   "FOR:<number> <message>" - forward message
@@ -42,7 +44,7 @@ public:
     SMSProcessor(SMSSender &sender, const String &targetNumber, SMSReader &reader, 
                  MainPowerCheck &mainPowerCheck, BatteryProcessor &batteryProcessor, TemperatureHumidityProcessor &tempHumidityProcessor,
                  ConfigManager &configManager, PhoneNumberManager &phoneNumberManager, AlertManager &alertManager, ClockManager &clockManager,
-                 OTAManager &otaManager, WebManager &webManager, Modem &modem);
+                 OTAManager &otaManager, WebManager &webManager, Modem &modem, PushoverNotifier &pushover);
 
     // Processes a command SMS. The original SMS is always considered handled
     // (caller should delete it regardless of individual command success).
@@ -70,6 +72,7 @@ private:
     void handleOTACommand(const String &senderNumber);
     void handleWebCommand(const String &rest, const String &senderNumber);
     void handleRestartCommand(const String &senderNumber);
+    void handleNotifCommand(const String &rest, const String &senderNumber);
     
     // Check if sender has required permission level
     bool hasPermission(const String &senderNumber, PhoneNumberManager::Permission required);
@@ -90,4 +93,5 @@ private:
     OTAManager                       &_otaManager;
     WebManager                       &_webManager;
     Modem                            &_modem;
+    PushoverNotifier                 &_pushover;
 };

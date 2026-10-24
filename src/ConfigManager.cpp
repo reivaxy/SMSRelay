@@ -37,6 +37,8 @@ void ConfigManager::init() {
         if (!_prefs.isKey("NTP_RESYNC_HRS")) _prefs.putInt("NTP_RESYNC_HRS", Defaults::NTP_RESYNC_HOURS);
         if (!_prefs.isKey("DST_OFFSET")) _prefs.putInt("DST_OFFSET", Defaults::DST_OFFSET);
         if (!_prefs.isKey("SMS_DISABLED")) _prefs.putInt("SMS_DISABLED", Defaults::SMS_SEND_DISABLED);
+        if (!_prefs.isKey("PUSHOVER_USER")) _prefs.putString("PUSHOVER_USER", Defaults::PUSHOVER_USER_TOKEN);
+        if (!_prefs.isKey("PUSHOVER_TOKEN")) _prefs.putString("PUSHOVER_TOKEN", Defaults::PUSHOVER_API_TOKEN);
         
         // Clean up any old/stray keys that might interfere
         const char* oldKeys[] = {"ALERT_RESEND_DELAY_MINS", "ALERT_RESEND_MIN", "BAT_ADC_THRESHOLD", "BAT_ADC_NEAR_EMPTY", "POWER_ADC_THRESHOLD"};
@@ -119,6 +121,8 @@ String ConfigManager::getParamKey(Param param) {
         case Param::NTP_RESYNC_HOURS:        return "NTP_RESYNC_HRS";
         case Param::DST_OFFSET:              return "DST_OFFSET";
         case Param::SMS_SEND_DISABLED:       return "SMS_DISABLED";
+        case Param::PUSHOVER_USER_TOKEN:     return "PUSHOVER_USER";
+        case Param::PUSHOVER_API_TOKEN:      return "PUSHOVER_TOKEN";
     }
     return "UNKNOWN";
 }
@@ -143,12 +147,14 @@ bool ConfigManager::parseParamName(const String &userInput, Param &outParam) {
     else if (input == "NTP_RESYNC_HRS" || input == "NTP_INTERVAL" || input == "NTP_RESYNC_INTERVAL_HOURS") { outParam = Param::NTP_RESYNC_HOURS; return true; }
     else if (input == "DST_OFFSET" || input == "DST_OFFSET_SECONDS") { outParam = Param::DST_OFFSET; return true; }
     else if (input == "SMS_DISABLED" || input == "SMS_SEND_DISABLED") { outParam = Param::SMS_SEND_DISABLED; return true; }
+    else if (input == "PUSHOVER_USER" || input == "PUSHOVER_USER_TOKEN") { outParam = Param::PUSHOVER_USER_TOKEN; return true; }
+    else if (input == "PUSHOVER_TOKEN" || input == "PUSHOVER_API_TOKEN") { outParam = Param::PUSHOVER_API_TOKEN; return true; }
     
     return false;
 }
 
 String ConfigManager::getValidParamNames() {
-    return "TEMP_HIGH, TEMP_LOW, TEMP_OFFSET, HUMIDITY_HIGH, HUMIDITY_LOW, HUMIDITY_OFFSET, BAT_THRESHOLD, BAT_NEAR_EMPTY, POWER_THRESHOLD, RESEND_MINS, WIFI_SSID, WIFI_PWD, NTP_RESYNC_HRS, DST_OFFSET, SMS_DISABLED";
+    return "TEMP_HIGH, TEMP_LOW, TEMP_OFFSET, HUMIDITY_HIGH, HUMIDITY_LOW, HUMIDITY_OFFSET, BAT_THRESHOLD, BAT_NEAR_EMPTY, POWER_THRESHOLD, RESEND_MINS, WIFI_SSID, WIFI_PWD, NTP_RESYNC_HRS, DST_OFFSET, SMS_DISABLED, PUSHOVER_USER, PUSHOVER_TOKEN";
 }
 
 String ConfigManager::getParamName(Param param) {
@@ -168,6 +174,8 @@ String ConfigManager::getParamName(Param param) {
         case Param::NTP_RESYNC_HOURS:        return "NTP Resync Interval (hours)";
         case Param::DST_OFFSET:              return "DST Offset (seconds)";
         case Param::SMS_SEND_DISABLED:       return "SMS Send Disabled";
+        case Param::PUSHOVER_USER_TOKEN:     return "Pushover User Token";
+        case Param::PUSHOVER_API_TOKEN:      return "Pushover API Token";
     }
     return "Unknown";
 }

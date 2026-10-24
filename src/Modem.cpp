@@ -225,7 +225,50 @@ bool Modem::configureNetwork()
     log_i("Registration Status:%d", status);
     delay(1000);
 
+    // Activate GPRS for data connections (HTTP, etc.)
+    if (!activateGprs()) {
+        log_w("GPRS activation failed, but continuing - will retry on first HTTP request");
+        // Don't fail initialization just because GPRS activation failed
+        // It might succeed later or on retry
+    }
+
     return true;
+}
+
+bool Modem::activateGprs()
+{
+    log_i("Attempting to activate GPRS connection...");
+    
+    // Check if GPRS is already connected
+    if (_modem.isGprsConnected()) {
+        log_i("GPRS already connected");
+        return true;
+    }
+
+    // Attempt to connect to GPRS
+    log_i("Connecting to GPRS...");
+    
+#ifdef NETWORK_APN
+    if (!_modem.gprsConnect(NETWORK_APN)) {
+        log_e("Modem: Failed to connect to GPRS with APN: %s", NETWORK_APN);
+        return false;
+    }
+#else
+    // If no APN is configured, attempt connection with empty APN
+    // The modem should use its default APN or fail gracefully
+    if (!_modem.gprsConnect("")) {
+        log_e("Modem: Failed to connect to GPRS (no APN configured)");
+        return false;
+    }
+#endif
+
+    log_i("GPRS connection successful");
+    return true;
+}
+
+bool Modem::isGprsConnected()
+{
+    return _modem.isGprsConnected();
 }
 
 void Modem::configureSMS()

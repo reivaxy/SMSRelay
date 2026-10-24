@@ -1,12 +1,11 @@
 # SMS relay
 
-This is a preliminary work on an new aquarium monitoring system, and this subsystem is in charge of warning in case 
+This is a key element on an new WIP aquarium monitoring system, this subsystem is in charge of warning in case 
 of main power failure, in which case the home wifi is no longer available to send alerts.
 
-It also monitors room temperature and humidity and can send alerts when configuratble thresholds are reached.
+Thanks to a DHT22 sensor, it also monitors room temperature and humidity and can send alerts when configurable thresholds are reached. This was really useful during 2026 heatwave, some aquariums needed extra cooling.
 
-Other devices, each monitoring one aquarium, will ultimately also use this device to send alerts by SMS and push notifications (light issue, 
-water level or temperature issue, ...)
+Other devices, each monitoring one aquarium, will ultimately also use this device to send alerts by SMS and push notifications (light issues, water level or temperature issues, ...)
 
 Years ago I designed an [arduino based device wich was doing that](https://github.com/reivaxy/aquaMonitor) that sent 
 text message for various alerts, including main power outage, and I noticed it would occasionaly receive text messages 

@@ -321,6 +321,14 @@ bool WebManager::parseHttpRequest(const String &request, String &method, String 
     return true;
 }
 
+// Mask a secret for display: first 4 characters followed by an asterisk
+static String maskToken(const String &token) {
+    if (token.length() == 0) {
+        return "";
+    }
+    return token.substring(0, 4) + "*";
+}
+
 String WebManager::handleFormSubmit(const String &postData) {
     log_i("[WEB] Form submission received");
 
@@ -405,6 +413,12 @@ String WebManager::handleFormSubmit(const String &postData) {
 
             case ConfigManager::Param::PUSHOVER_USER_TOKEN:
             case ConfigManager::Param::PUSHOVER_API_TOKEN: {
+                // The form only shows a masked token; ignore it if it comes back unchanged
+                if (paramValue == maskToken(_configManager.getStringParam(cfgParam))) {
+                    log_i("[WEB] %s unchanged - skipping update", paramName.c_str());
+                    pos = ampPos + 1;
+                    continue;
+                }
                 _configManager.setStringParam(cfgParam, paramValue);
                 success = true;
                 break;
@@ -622,10 +636,10 @@ String WebManager::generateHTMLForm() {
     html += "                <div class=\"section sections-full\">\n";
     html += "                    <div class=\"section-title\">Pushover Notifications</div>\n";
     html += "                    <div class=\"form-group\">\n";
-    html += "                        <label>User Token: <input type=\"text\" name=\"PUSHOVER_USER\" value=\"" + _configManager.getStringParam(ConfigManager::Param::PUSHOVER_USER_TOKEN) + "\" placeholder=\"Leave empty to disable\"></label>\n";
+    html += "                        <label>User Token: <input type=\"text\" name=\"PUSHOVER_USER\" class=\"secret\" autocomplete=\"off\" value=\"" + maskToken(_configManager.getStringParam(ConfigManager::Param::PUSHOVER_USER_TOKEN)) + "\" data-original=\"" + maskToken(_configManager.getStringParam(ConfigManager::Param::PUSHOVER_USER_TOKEN)) + "\" placeholder=\"Leave empty to disable\"></label>\n";
     html += "                    </div>\n";
     html += "                    <div class=\"form-group\">\n";
-    html += "                        <label>API Token: <input type=\"text\" name=\"PUSHOVER_TOKEN\" value=\"" + _configManager.getStringParam(ConfigManager::Param::PUSHOVER_API_TOKEN) + "\" placeholder=\"Leave empty to disable\"></label>\n";
+    html += "                        <label>API Token: <input type=\"text\" name=\"PUSHOVER_TOKEN\" class=\"secret\" autocomplete=\"off\" value=\"" + maskToken(_configManager.getStringParam(ConfigManager::Param::PUSHOVER_API_TOKEN)) + "\" data-original=\"" + maskToken(_configManager.getStringParam(ConfigManager::Param::PUSHOVER_API_TOKEN)) + "\" placeholder=\"Leave empty to disable\"></label>\n";
     html += "                    </div>\n";
     html += "                    <div style=\"font-size: 11px; color: #666; margin-top: 5px;\">\n";
     html += "                        Get tokens from <a href=\"https://pushover.net\" target=\"_blank\" style=\"color: #007bff; text-decoration: none;\">pushover.net</a>\n";
@@ -650,7 +664,13 @@ String WebManager::generateHTMLForm() {
     html += "            const formData = new FormData(this);\n";
     html += "            const params = new URLSearchParams();\n";
     html += "            for (let [key, value] of formData) {\n";
-    html += "                if (value) params.append(key, value);\n";
+    html += "                const el = this.elements[key];\n";
+    html += "                if (el && el.classList && el.classList.contains('secret')) {\n";
+    html += "                    // Secret fields: only send when modified (empty allowed to clear)\n";
+    html += "                    if (value !== el.dataset.original) params.append(key, value);\n";
+    html += "                } else if (value) {\n";
+    html += "                    params.append(key, value);\n";
+    html += "                }\n";
     html += "            }\n";
     html += "            // Handle SMS_DISABLED checkbox: send 0 if unchecked, 1 if checked\n";
     html += "            const smsCheckbox = document.getElementById('SMS_DISABLED');\n";

@@ -63,6 +63,8 @@ acknowledged by all authorized users
 - **Optional**: Pushover is only used when both tokens are configured. Leave them empty to disable it, SMS alerts
  are not affected
 - **Muting**: Muting a phone number only affects SMS, Pushover notifications are always sent when configured. They can be silent in the Pushover app on the receiver.
+- Push notif recipients are not configured in the device but in the pushover app for which you created and provide a token, and to which you subscribe groups of users defined in your pushover configuration.
+
 
 To set it up:
 1. Create an account on [pushover.net](https://pushover.net) and note your **User Key**

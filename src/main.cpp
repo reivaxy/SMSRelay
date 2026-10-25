@@ -76,6 +76,9 @@ void setup()
     if (!modem.init()) {
         log_e("Modem initialization failed, will retry in main loop");
     }
+
+    // Link WebManager to ClockManager so NTP resync won't disconnect the web server
+    clockManager.setWebManager(&webManager);
 }
 
 

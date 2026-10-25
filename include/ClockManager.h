@@ -3,6 +3,7 @@
 #include <TinyGsmClient.h>
 
 class ConfigManager;
+class WebManager;  // Forward declaration
 
 // Manages system time synchronization with NTP (primary) and fallback to mobile network.
 // - At initialization: Enable WiFi STA mode, sync from NTP server, disable WiFi
@@ -14,6 +15,9 @@ class ClockManager {
 public:
     ClockManager(TinyGsm &modem, ConfigManager &configManager);
     ~ClockManager();
+
+    // Set WebManager reference to check if web server is running (optional, can be nullptr)
+    void setWebManager(WebManager* webManager) { _webManager = webManager; }
 
     // Initialize clock from NTP (primary), fallback to mobile network time
     // Returns true if successfully synced, false if neither source available
@@ -39,7 +43,8 @@ public:
 
 private:
     // Synchronize time from NTP via WiFi
-    bool syncWithNTP();
+    // disableWifiAfter: if true, disable WiFi after sync; if false, preserve WiFi state
+    bool syncWithNTP(bool disableWifiAfter = true);
 
     // Synchronize time from mobile network (fallback)
     bool syncWithMobileNetwork();
@@ -64,6 +69,7 @@ private:
 
     TinyGsm    &_modem;
     ConfigManager &_configManager;
+    WebManager *_webManager;            // Optional reference to WebManager (nullptr if not set)
     bool       _initialized;
     SyncSource _syncSource;             // Track which source provided the time
     unsigned long _epochTime;           // Last synced Unix timestamp

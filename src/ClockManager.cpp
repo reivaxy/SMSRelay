@@ -4,6 +4,7 @@
 #include <TinyGsmClient.h>
 #include <WiFi.h>
 #include "ClockManager.h"
+#include "WebManager.h"
 
 // NTP Server addresses
 const char* ClockManager::NTP_SERVER1 = "pool.ntp.org";
@@ -11,7 +12,7 @@ const char* ClockManager::NTP_SERVER2 = "time.nist.gov";
 const char* ClockManager::NTP_SERVER3 = "time.google.com";
 
 ClockManager::ClockManager(TinyGsm &modem, ConfigManager &configManager)
-    : _modem(modem), _configManager(configManager), _initialized(false), 
+    : _modem(modem), _configManager(configManager), _webManager(nullptr), _initialized(false), 
       _syncSource(SYNC_NONE), _epochTime(0), _millisecondsAtSync(0), _lastNtpSyncTime(0), 
       _ntpResyncIntervalMs(4 * 60 * 60 * 1000), _tzOffsetSec(0) {
     log_i("[CLOCK] ClockManager initialized");
@@ -95,13 +96,15 @@ void ClockManager::disableWiFi() {
     WiFi.mode(WIFI_OFF);
 }
 
-bool ClockManager::syncWithNTP() {
+bool ClockManager::syncWithNTP(bool disableWifiAfter) {
     log_i("[CLOCK] Starting NTP synchronization...");
     
     // Enable WiFi
     if (!enableWiFi()) {
         log_w("[CLOCK] Failed to enable WiFi for NTP");
-        disableWiFi();
+        if (disableWifiAfter) {
+            disableWiFi();
+        }
         return false;
     }
     
@@ -135,8 +138,11 @@ bool ClockManager::syncWithNTP() {
                   _tzOffsetSec,
                   _configManager.getInt(ConfigManager::Param::DST_OFFSET));
             
-            // Disable WiFi after successful sync
-            disableWiFi();
+            // Disable WiFi after successful sync only if requested
+            // (preserve WiFi if web server is running)
+            if (disableWifiAfter) {
+                disableWiFi();
+            }
             return true;
         }
         
@@ -144,7 +150,9 @@ bool ClockManager::syncWithNTP() {
     }
     
     log_w("[CLOCK] NTP time sync timeout");
-    disableWiFi();
+    if (disableWifiAfter) {
+        disableWiFi();
+    }
     return false;
 }
 
@@ -313,7 +321,13 @@ void ClockManager::check() {
     if (now - _lastNtpSyncTime >= ntpResyncMs) {
         log_i("[CLOCK] Time for NTP resynchronization (interval: %d hours)...", ntpIntervalHours);
         
-        if (syncWithNTP()) {
+        // Check if web server is running - if so, preserve WiFi after NTP sync
+        bool webManagerRunning = false;
+        if (_webManager != nullptr) {
+            webManagerRunning = _webManager->isRunning();
+        }
+        
+        if (syncWithNTP(!webManagerRunning)) {
             _syncSource = SYNC_NTP;
             log_i("[CLOCK] Successfully resynchronized with NTP");
         } else {

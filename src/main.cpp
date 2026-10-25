@@ -129,7 +129,7 @@ void loop()
     // Check modem connection periodically and reconnect if needed
     modem.checkConnection();
 
-    // Check clock synchronization with network (every 2 hours)
+    // Check clock synchronization with network (every X hours)
     clockManager.check();
 
     // Check for incoming SMS periodically (but only if modem is connected)

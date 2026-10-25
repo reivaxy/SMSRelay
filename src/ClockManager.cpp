@@ -25,26 +25,26 @@ bool ClockManager::init() {
     log_i("[CLOCK] Initializing clock...");
       
     // Try mobile network time first (fastest, already connected)
-    log_i("[CLOCK] Attempting to sync time from mobile network...");
+    log_i("[CLOCK] === ATTEMPT 1: Syncing time from mobile network ===");
     if (syncWithMobileNetwork()) {
         _syncSource = SYNC_MOBILE;
         _initialized = true;
-        log_i("[CLOCK] Clock initialized from mobile network: %s", 
+        log_i("[CLOCK] ✓ SUCCESS: Clock initialized from MOBILE NETWORK: %s", 
               getFormattedDateTime().c_str());
         return true;
     }
     
     // Fall back to NTP (requires WiFi but more reliable)
-    log_w("[CLOCK] Mobile network time failed, attempting NTP...");
+    log_w("[CLOCK] === ATTEMPT 1 FAILED, ATTEMPT 2: Trying NTP ===");
     if (syncWithNTP()) {
         _syncSource = SYNC_NTP;
         _initialized = true;
-        log_i("[CLOCK] Clock initialized successfully from NTP: %s", 
+        log_i("[CLOCK] ✓ SUCCESS: Clock initialized from NTP: %s", 
               getFormattedDateTime().c_str());
         return true;
     }
     
-    log_e("[CLOCK] Failed to initialize clock from both mobile network and NTP");
+    log_e("[CLOCK] ✗ FAILED: Both mobile network and NTP initialization failed");
     return false;
 }
 
@@ -97,7 +97,7 @@ void ClockManager::disableWiFi() {
 }
 
 bool ClockManager::syncWithNTP(bool disableWifiAfter) {
-    log_i("[CLOCK] Starting NTP synchronization...");
+    log_i("[CLOCK] >>>>>> ENTERING syncWithNTP (disableWifiAfter=%d) <<<<<<", disableWifiAfter);
     
     // Enable WiFi
     if (!enableWiFi()) {
@@ -166,6 +166,8 @@ bool ClockManager::syncWithMobileNetwork() {
     float tzOffsetHours;  // Timezone in hours (as float)
     
     if (_modem.getNetworkTime(&year, &month, &day, &hour, &min, &sec, &tzOffsetHours)) {
+        log_i("[CLOCK] getNetworkTime() succeeded: %04d-%02d-%02d %02d:%02d:%02d TZ:%+.2f", 
+              year, month, day, hour, min, sec, tzOffsetHours);
         // Convert to Unix timestamp (approximate, doesn't account for timezone precisely)
         // This is a simplified conversion - for production, use a proper time library
         struct tm timeinfo = {0};
@@ -193,17 +195,14 @@ bool ClockManager::syncWithMobileNetwork() {
             log_i("[CLOCK] Mobile network time synced: %04d-%02d-%02d %02d:%02d:%02d TZ:%+.2f (epoch: %lu, offset: %d sec)",
                   year, month, day, hour, min, sec, tzOffsetHours, _epochTime, _tzOffsetSec);
             if (year != 0) {
-                _syncSource = SYNC_MOBILE;
-                _initialized = true;
                 return true;
-            } else {
-                return false;
-            }
-                  
+            }                       
         }
+        log_w("[CLOCK] Invalid time, rejecting mobile network time");
+        return false;
     }
     
-    log_w("[CLOCK] Failed to get time from mobile network");
+    log_w("[CLOCK] getNetworkTime() FAILED - mobile network time not available");
     return false;
 }
 

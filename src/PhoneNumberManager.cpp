@@ -12,6 +12,29 @@ void PhoneNumberManager::init() {
     if (!_prefs.begin("phoneNumbers", false)) {
         log_e("[PhoneNumberManager] Failed to initialize Preferences");
     }
+    
+    // Initialize all phone number slots to prevent "NOT_FOUND" errors when reading empty slots
+    for (int i = 0; i < MAX_ADDITIONAL_NUMBERS; i++) {
+        String phoneKey = getPhoneKey(i);
+        String permKey = getPermissionKey(i);
+        String muteKey = getMuteKey(i);
+        String aliasKey = getAliasKey(i);
+        
+        // Only initialize if keys don't already exist
+        if (!_prefs.isKey(phoneKey.c_str())) {
+            _prefs.putString(phoneKey.c_str(), "");
+        }
+        if (!_prefs.isKey(permKey.c_str())) {
+            _prefs.putInt(permKey.c_str(), (int)Permission::NONE);
+        }
+        if (!_prefs.isKey(muteKey.c_str())) {
+            _prefs.putBool(muteKey.c_str(), false);
+        }
+        if (!_prefs.isKey(aliasKey.c_str())) {
+            _prefs.putString(aliasKey.c_str(), "");
+        }
+    }
+    
     log_i("[PhoneNumberManager] Initialized with root: %s", _rootNumber.c_str());
 }
 

@@ -9,6 +9,7 @@
 #include "BatteryProcessor.h"
 #include "MainPowerCheck.h"
 #include <ctime>
+#include <ArduinoJson.h>
 
 WebManager::WebManager(ConfigManager &configManager, SMSSender &sender, PhoneNumberManager &phoneNumberManager, AlertManager &alertManager, Modem &modem, ClockManager &clockManager,
                        TemperatureHumidityProcessor &tempHumidityProcessor, BatteryProcessor &batteryProcessor, MainPowerCheck &mainPowerCheck)
@@ -143,6 +144,69 @@ void WebManager::handleClient(WiFiClient client) {
     }
 
     log_i("[WEB] %s %s", method.c_str(), path.c_str());
+
+    // Handle GET /api/ping (no access token required)
+    if (method == "GET" && path == "/api/ping") {
+        String response = "SmsRelay";
+        client.println("HTTP/1.1 200 OK");
+        client.println("Content-Type: text/plain");
+        client.println("Content-Length: " + String(response.length()));
+        client.println("Connection: close");
+        client.println();
+        client.print(response);
+        delay(100);
+        client.stop();
+        return;
+    }
+
+    // Handle POST /api/alerte (no access token required)
+    // Body: {"module":"<name>","text":"<message>"}
+    if (method == "POST" && path == "/api/alerte") {
+        const int maxBodySize = 1024;
+        int contentLength = 0;
+        String lowerRequest = request;
+        lowerRequest.toLowerCase();
+        int clPos = lowerRequest.indexOf("content-length:");
+        if (clPos >= 0) {
+            contentLength = lowerRequest.substring(clPos + 15).toInt();
+        }
+
+        String postBody = "";
+        unsigned long bodyTimeout = millis() + 1000;
+        while (client.connected() && millis() < bodyTimeout && (int)postBody.length() < maxBodySize &&
+               (contentLength <= 0 || (int)postBody.length() < contentLength)) {
+            if (client.available()) {
+                postBody += (char)client.read();
+            }
+        }
+
+        String status = "200 OK";
+        String response;
+        JsonDocument doc;
+        DeserializationError err = deserializeJson(doc, postBody);
+        String module = doc["module"] | "";
+        String text = doc["text"] | "";
+        if (err || module.length() == 0 || text.length() == 0) {
+            log_w("[WEB] Invalid alerte request");
+            status = "400 Bad Request";
+            response = "{\"status\":\"error\",\"message\":\"Expected JSON with module and text\"}";
+        } else {
+            String message = "Alert " + module + ": " + text;
+            log_i("[WEB] %s", message.c_str());
+            _alertManager.sendNotification("Alert " + module, message);
+            response = "{\"status\":\"ok\"}";
+        }
+
+        client.println("HTTP/1.1 " + status);
+        client.println("Content-Type: application/json");
+        client.println("Content-Length: " + String(response.length()));
+        client.println("Connection: close");
+        client.println();
+        client.print(response);
+        delay(100);
+        client.stop();
+        return;
+    }
 
     // Check if path contains the access token
     if (!path.startsWith("/" + _accessToken)) {

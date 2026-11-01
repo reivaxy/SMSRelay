@@ -87,24 +87,24 @@ String WebManager::generatePeersHTML() {
         rows += "                <tr>";
         rows += "<td>" + htmlEscape(String(_peers[i].name));
         if (_peers[i].type[0] != '\0') {
-            rows += "<br><span style=\"color: #666; font-size: 11px;\">(" + htmlEscape(String(_peers[i].type)) + ")</span>";
+            rows += "<br><span class=\"dev-type\">(" + htmlEscape(String(_peers[i].type)) + ")</span>";
         }
         rows += "</td>";
         rows += "<td>" + formatPeerTimestamp(_peers[i].timestamp) + "</td>";
-        rows += "<td><a href=\"http://" + ip + "/\" target=\"_blank\" rel=\"noopener\" style=\"display: inline-block; margin: 0; padding: 2px 8px; font-size: 12px; background: #007bff; color: white; border-radius: 4px; text-decoration: none;\">home</a></td>";
-        rows += "<td><button type=\"button\" class=\"status-btn\" data-ip=\"" + ip + "\" style=\"width: auto; margin: 0; padding: 2px 8px; font-size: 12px;\">status</button></td>";
+        rows += "<td><a class=\"btn btn-sm\" href=\"http://" + ip + "/\" target=\"_blank\" rel=\"noopener\">home</a></td>";
+        rows += "<td><button type=\"button\" class=\"btn-sm status-btn\" data-ip=\"" + ip + "\">status</button></td>";
         rows += "</tr>\n";
     }
     if (rows.length() == 0) {
-        return "            <div style=\"padding: 10px; color: #666;\">No devices recorded</div>\n";
+        return "            <div class=\"empty\">No devices recorded</div>\n";
     }
-    String html = "            <table style=\"width: 100%; border-collapse: collapse; font-size: 13px; background: white;\">\n";
-    html += "                <tr style=\"text-align: left; border-bottom: 1px solid #ddd;\"><th>Name</th><th>Last ping</th><th>Home</th><th>Status</th></tr>\n";
+    String html = "            <table class=\"devices\">\n";
+    html += "                <tr><th>Name</th><th>Last ping</th><th>Home</th><th>Status</th></tr>\n";
     html += rows;
     html += "            </table>\n";
-    html += "            <dialog id=\"statusDialog\" style=\"max-width: 90%; border-radius: 6px;\">\n";
-    html += "                <pre id=\"statusBody\" style=\"white-space: pre-wrap; word-break: break-all; font-size: 12px; margin: 0 0 8px 0; font-family: monospace;\"></pre>\n";
-    html += "                <button type=\"button\" id=\"statusQuit\" style=\"margin-top: 0;\">Quit</button>\n";
+    html += "            <dialog id=\"statusDialog\">\n";
+    html += "                <pre id=\"statusBody\"></pre>\n";
+    html += "                <button type=\"button\" id=\"statusQuit\">Quit</button>\n";
     html += "            </dialog>\n";
     return html;
 }
@@ -636,6 +636,92 @@ String WebManager::handleFormSubmit(const String &postData) {
     return response;
 }
 
+// Stylesheet shared by the home and configuration pages
+static const char PAGE_STYLE[] = R"css(
+        body { font-family: Arial, sans-serif; max-width: 600px; margin: 5px auto; padding: 5px; background: #f5f5f5; }
+        .container { background: white; padding: 10px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { color: #333; text-align: center; margin: 0 0 8px 0; font-size: 22px; }
+        .datetime { text-align: center; font-size: 12px; color: #444; margin-bottom: 10px; }
+        .rev { text-align: center; font-size: 11px; color: #666; margin-bottom: 10px; font-family: monospace; }
+        a { color: #007bff; text-decoration: none; }
+
+        .section { margin: 5px 0; padding: 8px; border-left: 4px solid #007bff; background: #f8f9fa; }
+        .section-title { font-weight: bold; color: #007bff; margin-bottom: 3px; font-size: 13px; }
+        .sections-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; }
+        .sections-grid .section { margin: 0; }
+        .sections-full { grid-column: 1 / -1; }
+        .sec-alerts { border-left-color: #dc3545; background: #fff5f5; }
+        .sec-alerts .section-title { color: #dc3545; }
+        .sec-devices { border-left-color: #28a745; background: #f4fbf6; }
+        .sec-devices .section-title { color: #28a745; }
+        .sec-levels { border-left-color: #17a2b8; background: #f0f7fb; }
+        .sec-levels .section-title { color: #17a2b8; }
+        .sec-phones { border-left-color: #6f42c1; background: #f8f5fc; }
+        .sec-phones .section-title { color: #6f42c1; }
+        .empty { padding: 10px; color: #666; }
+
+        .alert-item { margin: 4px 0; padding: 6px; background: white; border-radius: 4px; border-left: 3px solid #ff6b6b; font-size: 12px; }
+        .alert-row { display: flex; justify-content: space-between; align-items: flex-start; }
+        .alert-body { flex: 1; }
+        .alert-code { font-weight: bold; color: #dc3545; font-family: monospace; }
+        .alert-title { font-weight: bold; color: #333; display: inline; }
+        .alert-cause { color: #666; font-size: 11px; }
+        .alert-time { color: #999; font-size: 11px; display: block; margin-top: 2px; }
+        .alert-ack { background: #d4edda; color: #155724; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 11px; display: inline-block; margin-left: 4px; }
+        .no-alerts { color: #28a745; font-style: italic; font-size: 12px; }
+
+        .level-item { margin: 4px 0; padding: 6px; background: white; border-radius: 4px; border-left: 3px solid #17a2b8; }
+        .level-label { font-weight: bold; color: #333; }
+        .tag { padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 11px; }
+        .tag-high { background: #f8d7da; color: #721c24; }
+        .tag-low { background: #cfe2ff; color: #084298; }
+        .tag-ok { background: #d4edda; color: #155724; }
+        .tag-warn { background: #fff3cd; color: #664d03; }
+        .tag-admin { background: #d32f2f; color: white; }
+        .tag-read { background: #1976d2; color: white; }
+        .tag-muted { background: #ff9800; color: white; }
+
+        .phone-list { display: flex; flex-direction: column; gap: 8px; }
+        .phone-item { display: flex; justify-content: space-between; align-items: center; padding: 8px; background: white; border-radius: 4px; border-left: 3px solid #1976d2; }
+        .phone-item.admin { border-left-color: #d32f2f; }
+        .phone-main { flex: 1; }
+        .phone-number { font-family: monospace; }
+        .phone-alias { font-size: 12px; color: #666; margin-top: 2px; }
+        .phone-badges { display: flex; gap: 4px; align-items: center; }
+
+        table.devices { width: 100%; border-collapse: collapse; font-size: 13px; background: white; }
+        table.devices th { text-align: left; border-bottom: 1px solid #ddd; }
+        .dev-type { color: #666; font-size: 11px; }
+        dialog { max-width: 90%; border-radius: 6px; }
+        dialog pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; margin: 0 0 8px 0; font-family: monospace; }
+        dialog button { margin-top: 0; }
+
+        label { display: block; margin-bottom: 2px; font-weight: bold; color: #333; font-size: 12px; }
+        .form-group { margin: 2px 0; }
+        input, textarea { width: 100%; padding: 6px; margin-bottom: 3px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; font-size: 14px; }
+        .check-row { display: flex; align-items: center; }
+        .check-row input { width: auto; margin: 0 8px 0 0; }
+        .check-row label { margin-bottom: 0; font-weight: normal; }
+        .hint { font-size: 11px; color: #666; margin-top: 5px; }
+
+        button { width: 100%; padding: 8px; background: #007bff; color: white; border: none; border-radius: 4px; font-size: 14px; cursor: pointer; margin-top: 10px; }
+        button:hover { background: #0056b3; }
+        a.btn { display: block; text-align: center; padding: 8px; margin-top: 10px; background: #007bff; color: white; border-radius: 4px; font-size: 14px; }
+        a.btn:hover { background: #0056b3; }
+        a.back { display: block; text-align: center; padding: 6px; margin-bottom: 8px; font-size: 13px; }
+        a.btn-sm { display: inline-block; margin: 0; padding: 2px 8px; font-size: 12px; }
+        button.btn-sm { width: auto; margin: 0; padding: 2px 8px; font-size: 12px; }
+        button.btn-warn { background: #ff9800; }
+        button.btn-danger { background: #dc3545; }
+        button.ack-btn { margin-left: 8px; padding: 1px 3px; background: #28a745; border-radius: 2px; font-size: 9px; line-height: 1; white-space: nowrap; width: auto; min-width: auto; flex-shrink: 0; }
+        .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+        .actions .wide { grid-column: 1 / -1; }
+
+        .status { margin-top: 10px; padding: 6px; border-radius: 4px; display: none; font-size: 12px; }
+        .status.success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .status.error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+)css";
+
 // Common page start: head, styles, title, date/time and revision
 String WebManager::generatePageStart(const String &title, const String &heading) {
     String html = "";
@@ -643,32 +729,8 @@ String WebManager::generatePageStart(const String &title, const String &heading)
     html += "<html>\n<head>\n";
     html += "    <title>" + title + "</title>\n";
     html += "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n";
-    html += "    <style>\n";
-    html += "        body { font-family: Arial, sans-serif; max-width: 600px; margin: 5px auto; padding: 5px; background: #f5f5f5; }\n";
-    html += "        .container { background: white; padding: 10px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }\n";
-    html += "        h1 { color: #333; text-align: center; margin: 0 0 8px 0; font-size: 22px; }\n";
-    html += "        .section { margin: 5px 0; padding: 8px; border-left: 4px solid #007bff; background: #f8f9fa; }\n";
-    html += "        .section-title { font-weight: bold; color: #007bff; margin-bottom: 3px; font-size: 13px; }\n";
-    html += "        .form-group { margin: 2px 0; }\n";
-    html += "        .sections-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; }\n";
-    html += "        .sections-grid .section { margin: 0; }\n";
-    html += "        .sections-full { grid-column: 1 / -1; }\n";
-    html += "        .alert-item { margin: 4px 0; padding: 6px; background: white; border-radius: 4px; border-left: 3px solid #ff6b6b; font-size: 12px; }\n";
-    html += "        .alert-code { font-weight: bold; color: #dc3545; font-family: monospace; }\n";
-    html += "        .alert-title { font-weight: bold; color: #333; display: inline; }\n";
-    html += "        .alert-cause { color: #666; font-size: 11px; }\n";
-    html += "        .alert-time { color: #999; font-size: 11px; display: block; margin-top: 2px; }\n";
-    html += "        .alert-ack { background: #d4edda; color: #155724; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 11px; display: inline-block; margin-left: 4px; }\n";
-    html += "        .no-alerts { color: #28a745; font-style: italic; font-size: 12px; }\n";
-    html += "        label { display: block; margin-bottom: 2px; font-weight: bold; color: #333; font-size: 12px; }\n";
-    html += "        input, textarea { width: 100%; padding: 6px; margin-bottom: 3px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; font-size: 14px; }\n";
-    html += "        input[type=\"number\"] { width: 100%; }\n";
-    html += "        button { width: 100%; padding: 8px; background: #007bff; color: white; border: none; border-radius: 4px; font-size: 14px; cursor: pointer; margin-top: 10px; }\n";
-    html += "        button:hover { background: #0056b3; }\n";
-    html += "        .status { margin-top: 10px; padding: 6px; border-radius: 4px; display: none; font-size: 12px; }\n";
-    html += "        .status.success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }\n";
-    html += "        .status.error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }\n";
-    html += "        h1 { margin-bottom: 8px; }\n";
+    html += "    <style>";
+    html += PAGE_STYLE;
     html += "    </style>\n";
     html += "</head>\n<body>\n";
     html += "    <div class=\"container\">\n";
@@ -676,13 +738,13 @@ String WebManager::generatePageStart(const String &title, const String &heading)
     
     // Display current date/time from ClockManager
     String dateTime = _clockManager.getFormattedDateTime();
-    html += "        <div style=\"text-align: center; font-size: 12px; color: #444; margin-bottom: 10px;\">\n";
+    html += "        <div class=\"datetime\">\n";
     html += "            Device Date/Time: " + dateTime + "\n";
     html += "        </div>\n";
     
     // Display revision and git commit info
 #ifdef GIT_REV
-    html += "        <div style=\"text-align: center; font-size: 11px; color: #666; margin-bottom: 10px; font-family: monospace;\">\n";
+    html += "        <div class=\"rev\">\n";
     html += "            Rev: " + String(GIT_REV) + "\n";
     html += "        </div>\n";
 #endif
@@ -694,47 +756,47 @@ String WebManager::generateHomePage() {
     String html = generatePageStart("SMS Relay", "SMS Relay");
 
     // Alerts section
-    html += "        <div class=\"section sections-full\" style=\"border-left-color: #dc3545; background: #fff5f5;\">\n";
-    html += "            <div class=\"section-title\" style=\"color: #dc3545;\">Active Alerts</div>\n";
+    html += "        <div class=\"section sections-full sec-alerts\">\n";
+    html += "            <div class=\"section-title\">Active Alerts</div>\n";
     html += generateAlertsHTML();
     html += "        </div>\n";
 
     // Known devices (recorded from /api/ping)
-    html += "        <div class=\"section sections-full\" style=\"border-left-color: #28a745; background: #f4fbf6;\">\n";
-    html += "            <div class=\"section-title\" style=\"color: #28a745;\">Known Devices</div>\n";
+    html += "        <div class=\"section sections-full sec-devices\">\n";
+    html += "            <div class=\"section-title\">Known Devices</div>\n";
     html += generatePeersHTML();
     html += "        </div>\n";
     
     // Current Levels section
-    html += "        <div class=\"section sections-full\" style=\"border-left-color: #17a2b8; background: #f0f7fb;\">\n";
-    html += "            <div class=\"section-title\" style=\"color: #17a2b8;\">Current Levels</div>\n";
+    html += "        <div class=\"section sections-full sec-levels\">\n";
+    html += "            <div class=\"section-title\">Current Levels</div>\n";
     html += generateLevelsHTML();
     html += "        </div>\n";
     
     // Configured Phone Numbers section
-    html += "        <div class=\"section sections-full\" style=\"border-left-color: #6f42c1; background: #f8f5fc;\">\n";
-    html += "            <div class=\"section-title\" style=\"color: #6f42c1;\">Configured Phone Numbers</div>\n";
+    html += "        <div class=\"section sections-full sec-phones\">\n";
+    html += "            <div class=\"section-title\">Configured Phone Numbers</div>\n";
     std::vector<PhoneNumberManager::AuthorizedNumber> numbers = _phoneNumberManager.getAllNumbers();
     if (numbers.empty()) {
-        html += "            <div style=\"padding: 10px; color: #666;\">No phone numbers configured</div>\n";
+        html += "            <div class=\"empty\">No phone numbers configured</div>\n";
     } else {
-        html += "            <div style=\"display: flex; flex-direction: column; gap: 8px;\">\n";
+        html += "            <div class=\"phone-list\">\n";
         for (const auto& num : numbers) {
             String permission = (num.permission == PhoneNumberManager::Permission::ADMIN) ? "ADMIN" : 
                                (num.permission == PhoneNumberManager::Permission::READ) ? "READ-ONLY" : "NONE";
-            String permissionColor = (num.permission == PhoneNumberManager::Permission::ADMIN) ? "#d32f2f" : "#1976d2";
-            html += "                <div style=\"display: flex; justify-content: space-between; align-items: center; padding: 8px; background: white; border-radius: 4px; border-left: 3px solid " + permissionColor + ";\">\n";
-            html += "                    <div style=\"flex: 1;\">\n";
-            html += "                        <div style=\"font-family: monospace;\">" + num.number + "</div>\n";
+            bool isAdmin = (num.permission == PhoneNumberManager::Permission::ADMIN);
+            html += "                <div class=\"phone-item" + String(isAdmin ? " admin" : "") + "\">\n";
+            html += "                    <div class=\"phone-main\">\n";
+            html += "                        <div class=\"phone-number\">" + num.number + "</div>\n";
             if (num.alias.length() > 0) {
-                html += "                        <div style=\"font-size: 12px; color: #666; margin-top: 2px;\">" + num.alias + "</div>\n";
+                html += "                        <div class=\"phone-alias\">" + num.alias + "</div>\n";
             }
             html += "                    </div>\n";
-            html += "                    <div style=\"display: flex; gap: 4px; align-items: center;\">\n";
+            html += "                    <div class=\"phone-badges\">\n";
             if (num.muted) {
-                html += "                        <span style=\"background: #ff9800; color: white; padding: 2px 6px; border-radius: 3px; font-size: 10px; font-weight: bold;\">MUTED</span>\n";
+                html += "                        <span class=\"tag tag-muted\">MUTED</span>\n";
             }
-            html += "                        <span style=\"background: " + permissionColor + "; color: white; padding: 2px 8px; border-radius: 3px; font-size: 11px; font-weight: bold;\">" + permission + "</span>\n";
+            html += "                        <span class=\"tag " + String(isAdmin ? "tag-admin" : "tag-read") + "\">" + permission + "</span>\n";
             html += "                    </div>\n";
             html += "                </div>\n";
         }
@@ -742,7 +804,7 @@ String WebManager::generateHomePage() {
     }
     html += "        </div>\n";
     
-    html += "        <a href=\"/" + _accessToken + "/config\" style=\"display: block; text-align: center; padding: 8px; margin-top: 10px; background: #007bff; color: white; border-radius: 4px; text-decoration: none; font-size: 14px;\">Configuration</a>\n";
+    html += "        <a class=\"btn\" href=\"/" + _accessToken + "/config\">Configuration</a>\n";
     html += "        <div id=\"status\" class=\"status\"></div>\n";
     html += "    </div>\n";
 
@@ -818,7 +880,7 @@ String WebManager::generateConfigPage() {
     // Build HTML with current parameter values from ConfigManager
     String html = generatePageStart("SMS Relay Configuration", "Configuration");
 
-    html += "        <a href=\"/" + _accessToken + "/\" style=\"display: block; text-align: center; padding: 6px; margin-bottom: 8px; color: #007bff; text-decoration: none; font-size: 13px;\">&larr; Back to status</a>\n";
+    html += "        <a class=\"back\" href=\"/" + _accessToken + "/\">&larr; Back to status</a>\n";
     html += "        <form id=\"configForm\" data-token=\"" + _accessToken + "\">\n";
     html += "        <script>const ACCESS_TOKEN = '" + _accessToken + "';</script>\n";
     
@@ -877,9 +939,9 @@ String WebManager::generateConfigPage() {
     html += "                    <div class=\"form-group\">\n";
     html += "                        <label>Resend Delay (minutes): <input type=\"number\" name=\"RESEND_MINS\" value=\"" + String(_configManager.getInt(ConfigManager::Param::ALERT_RESEND_DELAY_MINS)) + "\"></label>\n";
     html += "                    </div>\n";
-    html += "                    <div class=\"form-group\" style=\"display: flex; align-items: center;\">\n";
-    html += "                        <input type=\"checkbox\" id=\"SMS_DISABLED\" name=\"SMS_DISABLED\" value=\"1\" style=\"margin-right: 8px; width: auto; margin-bottom: 0;\" " + (String(_configManager.getInt(ConfigManager::Param::SMS_SEND_DISABLED)) == "1" ? String("checked") : String("")) + ">\n";
-    html += "                        <label for=\"SMS_DISABLED\" style=\"margin-bottom: 0; font-weight: normal;\">Disable SMS notifications</label>\n";
+    html += "                    <div class=\"form-group check-row\">\n";
+    html += "                        <input type=\"checkbox\" id=\"SMS_DISABLED\" name=\"SMS_DISABLED\" value=\"1\" " + (String(_configManager.getInt(ConfigManager::Param::SMS_SEND_DISABLED)) == "1" ? String("checked") : String("")) + ">\n";
+    html += "                        <label for=\"SMS_DISABLED\">Disable SMS notifications</label>\n";
     html += "                    </div>\n";
     html += "                </div>\n";
 
@@ -914,17 +976,17 @@ String WebManager::generateConfigPage() {
     html += "                    <div class=\"form-group\">\n";
     html += "                        <label>API Token: <input type=\"text\" name=\"PUSHOVER_TOKEN\" class=\"secret\" autocomplete=\"off\" value=\"" + maskToken(_configManager.getStringParam(ConfigManager::Param::PUSHOVER_API_TOKEN)) + "\" data-original=\"" + maskToken(_configManager.getStringParam(ConfigManager::Param::PUSHOVER_API_TOKEN)) + "\" placeholder=\"Leave empty to disable\"></label>\n";
     html += "                    </div>\n";
-    html += "                    <div style=\"font-size: 11px; color: #666; margin-top: 5px;\">\n";
-    html += "                        Get tokens from <a href=\"https://pushover.net\" target=\"_blank\" style=\"color: #007bff; text-decoration: none;\">pushover.net</a>\n";
+    html += "                    <div class=\"hint\">\n";
+    html += "                        Get tokens from <a href=\"https://pushover.net\" target=\"_blank\">pushover.net</a>\n";
     html += "                    </div>\n";
     html += "                </div>\n";
     
     html += "            </div>\n";
 
-    html += "            <div style=\"display: grid; grid-template-columns: 1fr 1fr; gap: 5px;\">\n";
-    html += "                <button type=\"submit\" style=\"grid-column: 1;\">Save</button>\n";
-    html += "                <button type=\"button\" id=\"restartBtn\" style=\"grid-column: 2; background: #ff9800;\">Restart</button>\n";
-    html += "                <button type=\"button\" id=\"weboffBtn\" style=\"grid-column: 1 / -1; background: #dc3545;\">Web Off</button>\n";
+    html += "            <div class=\"actions\">\n";
+    html += "                <button type=\"submit\">Save</button>\n";
+    html += "                <button type=\"button\" id=\"restartBtn\" class=\"btn-warn\">Restart</button>\n";
+    html += "                <button type=\"button\" id=\"weboffBtn\" class=\"btn-danger wide\">Web Off</button>\n";
     html += "            </div>\n";
     html += "        </form>\n";
     html += "        <div id=\"status\" class=\"status\"></div>\n";
@@ -1119,8 +1181,8 @@ String WebManager::generateAlertsHTML() {
             
             // Format as HTML alert item
             html += "            <div class=\"alert-item\">\n";
-            html += "                <div style=\"display: flex; justify-content: space-between; align-items: flex-start;\">\n";
-            html += "                    <div style=\"flex: 1;\">\n";
+            html += "                <div class=\"alert-row\">\n";
+            html += "                    <div class=\"alert-body\">\n";
             html += "                        <span class=\"alert-code\">[" + code + "]</span> ";
             html += "<span class=\"alert-title\">" + title + "</span>";
             if (ackInfo.length() > 0) {
@@ -1135,7 +1197,7 @@ String WebManager::generateAlertsHTML() {
             }
             html += "                    </div>\n";
             if (ackInfo.length() == 0) {
-                html += "                    <button type=\"button\" class=\"ack-btn\" data-code=\"" + code + "\" style=\"margin-left: 8px; padding: 1px 3px; background: #28a745; color: white; border: none; border-radius: 2px; font-size: 9px; line-height: 1; cursor: pointer; white-space: nowrap; width: auto; min-width: auto; flex-shrink: 0;\">ACK</button>\n";
+                html += "                    <button type=\"button\" class=\"ack-btn\" data-code=\"" + code + "\">ACK</button>\n";
             }
             html += "                </div>\n";
             html += "            </div>\n";
@@ -1155,14 +1217,14 @@ String WebManager::generateLevelsHTML() {
     float tempHigh = _configManager.getFloat(ConfigManager::Param::TEMP_HIGH);
     float tempLow = _configManager.getFloat(ConfigManager::Param::TEMP_LOW);
     
-    html += "            <div style=\"margin: 4px 0; padding: 6px; background: white; border-radius: 4px; border-left: 3px solid #17a2b8;\">\n";
-    html += "                <span style=\"font-weight: bold; color: #333;\">Temperature:</span> " + String(temp, 1) + "°C\n";
+    html += "            <div class=\"level-item\">\n";
+    html += "                <span class=\"level-label\">Temperature:</span> " + String(temp, 1) + "°C\n";
     if (temp > tempHigh) {
-        html += " <span style=\"background: #f8d7da; color: #721c24; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 11px;\">[HIGH]</span>\n";
+        html += " <span class=\"tag tag-high\">[HIGH]</span>\n";
     } else if (temp < tempLow) {
-        html += " <span style=\"background: #cfe2ff; color: #084298; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 11px;\">[LOW]</span>\n";
+        html += " <span class=\"tag tag-low\">[LOW]</span>\n";
     } else {
-        html += " <span style=\"background: #d4edda; color: #155724; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 11px;\">[OK]</span>\n";
+        html += " <span class=\"tag tag-ok\">[OK]</span>\n";
     }
     html += "            </div>\n";
     
@@ -1171,14 +1233,14 @@ String WebManager::generateLevelsHTML() {
     float humidityHigh = _configManager.getFloat(ConfigManager::Param::HUMIDITY_HIGH);
     float humidityLow = _configManager.getFloat(ConfigManager::Param::HUMIDITY_LOW);
     
-    html += "            <div style=\"margin: 4px 0; padding: 6px; background: white; border-radius: 4px; border-left: 3px solid #17a2b8;\">\n";
-    html += "                <span style=\"font-weight: bold; color: #333;\">Humidity:</span> " + String(humidity, 1) + "%\n";
+    html += "            <div class=\"level-item\">\n";
+    html += "                <span class=\"level-label\">Humidity:</span> " + String(humidity, 1) + "%\n";
     if (humidity > humidityHigh) {
-        html += " <span style=\"background: #f8d7da; color: #721c24; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 11px;\">[HIGH]</span>\n";
+        html += " <span class=\"tag tag-high\">[HIGH]</span>\n";
     } else if (humidity < humidityLow) {
-        html += " <span style=\"background: #cfe2ff; color: #084298; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 11px;\">[LOW]</span>\n";
+        html += " <span class=\"tag tag-low\">[LOW]</span>\n";
     } else {
-        html += " <span style=\"background: #d4edda; color: #155724; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 11px;\">[OK]</span>\n";
+        html += " <span class=\"tag tag-ok\">[OK]</span>\n";
     }
     html += "            </div>\n";
     
@@ -1188,14 +1250,14 @@ String WebManager::generateLevelsHTML() {
     int batAdcThreshold = _configManager.getInt(ConfigManager::Param::BAT_ADC_THRESHOLD);
     int batAdcNearEmpty = _configManager.getInt(ConfigManager::Param::BAT_ADC_NEAR_EMPTY);
     
-    html += "            <div style=\"margin: 4px 0; padding: 6px; background: white; border-radius: 4px; border-left: 3px solid #17a2b8;\">\n";
-    html += "                <span style=\"font-weight: bold; color: #333;\">Battery:</span> " + String(batAdcValue) + "\n";
+    html += "            <div class=\"level-item\">\n";
+    html += "                <span class=\"level-label\">Battery:</span> " + String(batAdcValue) + "\n";
     if (batAdcValue < batAdcNearEmpty) {
-        html += " <span style=\"background: #f8d7da; color: #721c24; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 11px;\">[NEAR EMPTY]</span>\n";
+        html += " <span class=\"tag tag-high\">[NEAR EMPTY]</span>\n";
     } else if (batAdcValue < batAdcThreshold) {
-        html += " <span style=\"background: #fff3cd; color: #664d03; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 11px;\">[USB]</span>\n";
+        html += " <span class=\"tag tag-warn\">[USB]</span>\n";
     } else {
-        html += " <span style=\"background: #d4edda; color: #155724; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 11px;\">[OK]</span>\n";
+        html += " <span class=\"tag tag-ok\">[OK]</span>\n";
     }
     html += "            </div>\n";
 #endif
@@ -1204,12 +1266,12 @@ String WebManager::generateLevelsHTML() {
     int mainAdcValue = MainPowerCheck::readGPIO00ADC();
     int powerAdcThreshold = _configManager.getInt(ConfigManager::Param::POWER_ADC_THRESHOLD);
     
-    html += "            <div style=\"margin: 4px 0; padding: 6px; background: white; border-radius: 4px; border-left: 3px solid #17a2b8;\">\n";
-    html += "                <span style=\"font-weight: bold; color: #333;\">Main Power:</span> " + String(mainAdcValue) + "\n";
+    html += "            <div class=\"level-item\">\n";
+    html += "                <span class=\"level-label\">Main Power:</span> " + String(mainAdcValue) + "\n";
     if (mainAdcValue < powerAdcThreshold) {
-        html += " <span style=\"background: #f8d7da; color: #721c24; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 11px;\">[LOW]</span>\n";
+        html += " <span class=\"tag tag-high\">[LOW]</span>\n";
     } else {
-        html += " <span style=\"background: #d4edda; color: #155724; padding: 2px 6px; border-radius: 3px; font-weight: bold; font-size: 11px;\">[OK]</span>\n";
+        html += " <span class=\"tag tag-ok\">[OK]</span>\n";
     }
     html += "            </div>\n";
     

@@ -64,7 +64,9 @@ private:
     void sendResponse(WiFiClient &client, const String &status, const String &contentType, const String &body);
 
     // Generate HTML form with all parameters
-    String generateHTMLForm();
+    String generatePageStart(const String &title, const String &heading);
+    String generateHomePage();
+    String generateConfigPage();
 
     // Handle form submission to update parameters
     String handleFormSubmit(const String &postData);

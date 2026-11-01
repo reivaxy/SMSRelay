@@ -85,10 +85,13 @@ String WebManager::generatePeersHTML() {
         if (!_peers[i].used) continue;
         String ip = _peers[i].ip.toString();
         rows += "                <tr>";
-        rows += "<td>" + htmlEscape(String(_peers[i].name)) + "</td>";
-        rows += "<td>" + htmlEscape(String(_peers[i].type)) + "</td>";
+        rows += "<td>" + htmlEscape(String(_peers[i].name));
+        if (_peers[i].type[0] != '\0') {
+            rows += "<br><span style=\"color: #666; font-size: 11px;\">(" + htmlEscape(String(_peers[i].type)) + ")</span>";
+        }
+        rows += "</td>";
         rows += "<td>" + formatPeerTimestamp(_peers[i].timestamp) + "</td>";
-        rows += "<td><a href=\"http://" + ip + "/\" target=\"_blank\">" + ip + "</a></td>";
+        rows += "<td><a href=\"http://" + ip + "/\" target=\"_blank\" rel=\"noopener\" style=\"display: inline-block; margin: 0; padding: 2px 8px; font-size: 12px; background: #007bff; color: white; border-radius: 4px; text-decoration: none;\">home</a></td>";
         rows += "<td><button type=\"button\" class=\"status-btn\" data-ip=\"" + ip + "\" style=\"width: auto; margin: 0; padding: 2px 8px; font-size: 12px;\">status</button></td>";
         rows += "</tr>\n";
     }
@@ -96,7 +99,7 @@ String WebManager::generatePeersHTML() {
         return "            <div style=\"padding: 10px; color: #666;\">No devices recorded</div>\n";
     }
     String html = "            <table style=\"width: 100%; border-collapse: collapse; font-size: 13px; background: white;\">\n";
-    html += "                <tr style=\"text-align: left; border-bottom: 1px solid #ddd;\"><th>Name</th><th>Type</th><th>Last ping</th><th>IP</th><th>Status</th></tr>\n";
+    html += "                <tr style=\"text-align: left; border-bottom: 1px solid #ddd;\"><th>Name</th><th>Last ping</th><th>Home</th><th>Status</th></tr>\n";
     html += rows;
     html += "            </table>\n";
     html += "            <dialog id=\"statusDialog\" style=\"max-width: 90%; border-radius: 6px;\">\n";
@@ -349,7 +352,11 @@ void WebManager::handleClient(WiFiClient client) {
 
     // Handle GET /
     if (method == "GET" && (routePath == "/" || routePath == "")) {
-        sendResponse(client, "200 OK", "text/html; charset=UTF-8", generateHTMLForm());
+        sendResponse(client, "200 OK", "text/html; charset=UTF-8", generateHomePage());
+    }
+    // Handle GET /config
+    else if (method == "GET" && routePath == "/config") {
+        sendResponse(client, "200 OK", "text/html; charset=UTF-8", generateConfigPage());
     }
     // Handle POST /api/config
     else if (method == "POST" && routePath == "/api/config") {
@@ -629,12 +636,12 @@ String WebManager::handleFormSubmit(const String &postData) {
     return response;
 }
 
-String WebManager::generateHTMLForm() {
-    // Build HTML with current parameter values from ConfigManager
+// Common page start: head, styles, title, date/time and revision
+String WebManager::generatePageStart(const String &title, const String &heading) {
     String html = "";
     html += "<!DOCTYPE html>\n";
     html += "<html>\n<head>\n";
-    html += "    <title>SMS Relay Configuration</title>\n";
+    html += "    <title>" + title + "</title>\n";
     html += "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n";
     html += "    <style>\n";
     html += "        body { font-family: Arial, sans-serif; max-width: 600px; margin: 5px auto; padding: 5px; background: #f5f5f5; }\n";
@@ -665,7 +672,7 @@ String WebManager::generateHTMLForm() {
     html += "    </style>\n";
     html += "</head>\n<body>\n";
     html += "    <div class=\"container\">\n";
-    html += "        <h1>Configuration</h1>\n";
+    html += "        <h1>" + heading + "</h1>\n";
     
     // Display current date/time from ClockManager
     String dateTime = _clockManager.getFormattedDateTime();
@@ -679,11 +686,23 @@ String WebManager::generateHTMLForm() {
     html += "            Rev: " + String(GIT_REV) + "\n";
     html += "        </div>\n";
 #endif
-    
+
+    return html;
+}
+
+String WebManager::generateHomePage() {
+    String html = generatePageStart("SMS Relay", "SMS Relay");
+
     // Alerts section
     html += "        <div class=\"section sections-full\" style=\"border-left-color: #dc3545; background: #fff5f5;\">\n";
     html += "            <div class=\"section-title\" style=\"color: #dc3545;\">Active Alerts</div>\n";
     html += generateAlertsHTML();
+    html += "        </div>\n";
+
+    // Known devices (recorded from /api/ping)
+    html += "        <div class=\"section sections-full\" style=\"border-left-color: #28a745; background: #f4fbf6;\">\n";
+    html += "            <div class=\"section-title\" style=\"color: #28a745;\">Known Devices</div>\n";
+    html += generatePeersHTML();
     html += "        </div>\n";
     
     // Current Levels section
@@ -723,12 +742,83 @@ String WebManager::generateHTMLForm() {
     }
     html += "        </div>\n";
     
-    // Known devices (recorded from /api/ping)
-    html += "        <div class=\"section sections-full\" style=\"border-left-color: #28a745; background: #f4fbf6;\">\n";
-    html += "            <div class=\"section-title\" style=\"color: #28a745;\">Known Devices</div>\n";
-    html += generatePeersHTML();
-    html += "        </div>\n";
+    html += "        <a href=\"/" + _accessToken + "/config\" style=\"display: block; text-align: center; padding: 8px; margin-top: 10px; background: #007bff; color: white; border-radius: 4px; text-decoration: none; font-size: 14px;\">Configuration</a>\n";
+    html += "        <div id=\"status\" class=\"status\"></div>\n";
+    html += "    </div>\n";
 
+    html += "    <script>\n";
+    html += "        const ACCESS_TOKEN = '" + _accessToken + "';\n";
+    html += "        // Handle ACK buttons for alerts\n";
+    html += "        document.querySelectorAll('.ack-btn').forEach(btn => {\n";
+    html += "            btn.addEventListener('click', async function(e) {\n";
+    html += "                e.preventDefault();\n";
+    html += "                const code = this.getAttribute('data-code');\n";
+    html += "                const params = new URLSearchParams();\n";
+    html += "                params.append('code', code);\n";
+    html += "                try {\n";
+    html += "                    const response = await fetch('/' + ACCESS_TOKEN + '/api/ack', {\n";
+    html += "                        method: 'POST',\n";
+    html += "                        body: params.toString(),\n";
+    html += "                        headers: {'Content-Type': 'application/x-www-form-urlencoded'}\n";
+    html += "                    });\n";
+    html += "                    const text = await response.text();\n";
+    html += "                    const result = JSON.parse(text);\n";
+    html += "                    const statusDiv = document.getElementById('status');\n";
+    html += "                    if (result.status === 'ok') {\n";
+    html += "                        this.style.display = 'none';\n";
+    html += "                        statusDiv.className = 'status success';\n";
+    html += "                        statusDiv.textContent = 'Alert [' + code + '] acknowledged';\n";
+    html += "                        statusDiv.style.display = 'block';\n";
+    html += "                        setTimeout(() => location.reload(), 1500);\n";
+    html += "                    } else {\n";
+    html += "                        statusDiv.className = 'status error';\n";
+    html += "                        statusDiv.textContent = 'Error: ' + result.message;\n";
+    html += "                        statusDiv.style.display = 'block';\n";
+    html += "                    }\n";
+    html += "                } catch (error) {\n";
+    html += "                    const statusDiv = document.getElementById('status');\n";
+    html += "                    statusDiv.className = 'status error';\n";
+    html += "                    statusDiv.textContent = 'Network error: ' + error.message;\n";
+    html += "                    statusDiv.style.display = 'block';\n";
+    html += "                }\n";
+    html += "            });\n";
+    html += "        });\n";
+    html += "        \n";
+    html += "        // Known devices: show the /api/status JSON in a dialog\n";
+    html += "        const statusDialog = document.getElementById('statusDialog');\n";
+    html += "        if (statusDialog) {\n";
+    html += "            document.getElementById('statusQuit').addEventListener('click', () => statusDialog.close());\n";
+    html += "            document.querySelectorAll('.status-btn').forEach(btn => {\n";
+    html += "                btn.addEventListener('click', async function() {\n";
+    html += "                    const ip = this.getAttribute('data-ip');\n";
+    html += "                    const body = document.getElementById('statusBody');\n";
+    html += "                    body.textContent = 'Loading ' + ip + ' ...';\n";
+    html += "                    statusDialog.showModal();\n";
+    html += "                    try {\n";
+    html += "                        const response = await fetch('/' + ACCESS_TOKEN + '/api/status?ip=' + encodeURIComponent(ip));\n";
+    html += "                        const text = await response.text();\n";
+    html += "                        try {\n";
+    html += "                            body.textContent = JSON.stringify(JSON.parse(text), null, 2);\n";
+    html += "                        } catch (parseError) {\n";
+    html += "                            body.textContent = text;\n";
+    html += "                        }\n";
+    html += "                    } catch (error) {\n";
+    html += "                        body.textContent = 'Network error: ' + error.message;\n";
+    html += "                    }\n";
+    html += "                });\n";
+    html += "            });\n";
+    html += "        }\n";
+    html += "    </script>\n";
+    html += "</body>\n</html>\n";
+
+    return html;
+}
+
+String WebManager::generateConfigPage() {
+    // Build HTML with current parameter values from ConfigManager
+    String html = generatePageStart("SMS Relay Configuration", "Configuration");
+
+    html += "        <a href=\"/" + _accessToken + "/\" style=\"display: block; text-align: center; padding: 6px; margin-bottom: 8px; color: #007bff; text-decoration: none; font-size: 13px;\">&larr; Back to status</a>\n";
     html += "        <form id=\"configForm\" data-token=\"" + _accessToken + "\">\n";
     html += "        <script>const ACCESS_TOKEN = '" + _accessToken + "';</script>\n";
     
@@ -935,67 +1025,6 @@ String WebManager::generateHTMLForm() {
     html += "                statusDiv.style.display = 'block';\n";
     html += "            }\n";
     html += "        });\n";
-    html += "        \n";
-    html += "        // Handle ACK buttons for alerts\n";
-    html += "        document.querySelectorAll('.ack-btn').forEach(btn => {\n";
-    html += "            btn.addEventListener('click', async function(e) {\n";
-    html += "                e.preventDefault();\n";
-    html += "                const code = this.getAttribute('data-code');\n";
-    html += "                const params = new URLSearchParams();\n";
-    html += "                params.append('code', code);\n";
-    html += "                try {\n";
-    html += "                    const response = await fetch('/' + ACCESS_TOKEN + '/api/ack', {\n";
-    html += "                        method: 'POST',\n";
-    html += "                        body: params.toString(),\n";
-    html += "                        headers: {'Content-Type': 'application/x-www-form-urlencoded'}\n";
-    html += "                    });\n";
-    html += "                    const text = await response.text();\n";
-    html += "                    const result = JSON.parse(text);\n";
-    html += "                    const statusDiv = document.getElementById('status');\n";
-    html += "                    if (result.status === 'ok') {\n";
-    html += "                        this.style.display = 'none';\n";
-    html += "                        statusDiv.className = 'status success';\n";
-    html += "                        statusDiv.textContent = 'Alert [' + code + '] acknowledged';\n";
-    html += "                        statusDiv.style.display = 'block';\n";
-    html += "                        setTimeout(() => location.reload(), 1500);\n";
-    html += "                    } else {\n";
-    html += "                        statusDiv.className = 'status error';\n";
-    html += "                        statusDiv.textContent = 'Error: ' + result.message;\n";
-    html += "                        statusDiv.style.display = 'block';\n";
-    html += "                    }\n";
-    html += "                } catch (error) {\n";
-    html += "                    const statusDiv = document.getElementById('status');\n";
-    html += "                    statusDiv.className = 'status error';\n";
-    html += "                    statusDiv.textContent = 'Network error: ' + error.message;\n";
-    html += "                    statusDiv.style.display = 'block';\n";
-    html += "                }\n";
-    html += "            });\n";
-    html += "        });\n";
-    html += "        \n";
-    html += "        // Known devices: show the raw /api/status JSON in a dialog\n";
-    html += "        const statusDialog = document.getElementById('statusDialog');\n";
-    html += "        if (statusDialog) {\n";
-    html += "            document.getElementById('statusQuit').addEventListener('click', () => statusDialog.close());\n";
-    html += "            document.querySelectorAll('.status-btn').forEach(btn => {\n";
-    html += "                btn.addEventListener('click', async function() {\n";
-    html += "                    const ip = this.getAttribute('data-ip');\n";
-    html += "                    const body = document.getElementById('statusBody');\n";
-    html += "                    body.textContent = 'Loading ' + ip + ' ...';\n";
-    html += "                    statusDialog.showModal();\n";
-    html += "                    try {\n";
-    html += "                        const response = await fetch('/' + ACCESS_TOKEN + '/api/status?ip=' + encodeURIComponent(ip));\n";
-    html += "                        const text = await response.text();\n";
-    html += "                        try {\n";
-    html += "                            body.textContent = JSON.stringify(JSON.parse(text), null, 2);\n";
-    html += "                        } catch (parseError) {\n";
-    html += "                            body.textContent = text;\n";
-    html += "                        }\n";
-    html += "                    } catch (error) {\n";
-    html += "                        body.textContent = 'Network error: ' + error.message;\n";
-    html += "                    }\n";
-    html += "                });\n";
-    html += "            });\n";
-    html += "        }\n";
     html += "    </script>\n";
     html += "</body>\n</html>\n";
 

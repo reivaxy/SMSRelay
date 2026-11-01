@@ -11,11 +11,141 @@
 #include <ctime>
 #include <ArduinoJson.h>
 
+static String htmlEscape(const String &s) {
+    String out = "";
+    for (int i = 0; i < (int)s.length(); i++) {
+        char c = s[i];
+        switch (c) {
+            case '&': out += "&amp;"; break;
+            case '<': out += "&lt;"; break;
+            case '>': out += "&gt;"; break;
+            case '"': out += "&quot;"; break;
+            case '\'': out += "&#39;"; break;
+            default: out += c;
+        }
+    }
+    return out;
+}
+
 WebManager::WebManager(ConfigManager &configManager, SMSSender &sender, PhoneNumberManager &phoneNumberManager, AlertManager &alertManager, Modem &modem, ClockManager &clockManager,
                        TemperatureHumidityProcessor &tempHumidityProcessor, BatteryProcessor &batteryProcessor, MainPowerCheck &mainPowerCheck)
     : _server(nullptr), _configManager(configManager), _sender(sender), _phoneNumberManager(phoneNumberManager), _alertManager(alertManager), _modem(modem), _clockManager(clockManager),
       _tempHumidityProcessor(tempHumidityProcessor), _batteryProcessor(batteryProcessor), _mainPowerCheck(mainPowerCheck),
-      _isRunning(false), _requesterNumber(""), _serverURL(""), _accessToken("") {}
+      _isRunning(false), _requesterNumber(""), _serverURL(""), _accessToken("") {
+    for (size_t i = 0; i < MAX_PEERS; i++) {
+        _peers[i].used = false;
+        _peers[i].name[0] = '\0';
+        _peers[i].type[0] = '\0';
+        _peers[i].timestamp = 0;
+    }
+}
+
+bool WebManager::registerPeer(const IPAddress &ip, const String &name, const String &type) {
+    int freeSlot = -1;
+    unsigned long now = _clockManager.isInitialized() ? _clockManager.getCurrentTime() : 0;
+    for (size_t i = 0; i < MAX_PEERS; i++) {
+        if (_peers[i].used && _peers[i].ip == ip) {
+            strlcpy(_peers[i].name, name.c_str(), sizeof(_peers[i].name));
+            strlcpy(_peers[i].type, type.c_str(), sizeof(_peers[i].type));
+            _peers[i].timestamp = now;
+            return true;
+        }
+        if (!_peers[i].used && freeSlot < 0) {
+            freeSlot = (int)i;
+        }
+    }
+    if (freeSlot < 0) {
+        log_w("[WEB] Peer table full, ignoring %s", ip.toString().c_str());
+        return false;
+    }
+    _peers[freeSlot].used = true;
+    _peers[freeSlot].ip = ip;
+    strlcpy(_peers[freeSlot].name, name.c_str(), sizeof(_peers[freeSlot].name));
+    strlcpy(_peers[freeSlot].type, type.c_str(), sizeof(_peers[freeSlot].type));
+    _peers[freeSlot].timestamp = now;
+    return true;
+}
+
+static String formatPeerTimestamp(unsigned long epoch) {
+    if (epoch == 0) {
+        return "-";
+    }
+    time_t t = (time_t)epoch;
+    struct tm *timeinfo = gmtime(&t);  // Epoch already includes local offsets
+    char buffer[24];
+    snprintf(buffer, sizeof(buffer), "%04d-%02d-%02d %02d:%02d:%02d",
+             timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday,
+             timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
+    return String(buffer);
+}
+
+String WebManager::generatePeersHTML() {
+    String rows = "";
+    for (size_t i = 0; i < MAX_PEERS; i++) {
+        if (!_peers[i].used) continue;
+        String ip = _peers[i].ip.toString();
+        rows += "                <tr>";
+        rows += "<td>" + htmlEscape(String(_peers[i].name)) + "</td>";
+        rows += "<td>" + htmlEscape(String(_peers[i].type)) + "</td>";
+        rows += "<td>" + formatPeerTimestamp(_peers[i].timestamp) + "</td>";
+        rows += "<td><a href=\"http://" + ip + "/\" target=\"_blank\">" + ip + "</a></td>";
+        rows += "<td><button type=\"button\" class=\"status-btn\" data-ip=\"" + ip + "\" style=\"width: auto; margin: 0; padding: 2px 8px; font-size: 12px;\">status</button></td>";
+        rows += "</tr>\n";
+    }
+    if (rows.length() == 0) {
+        return "            <div style=\"padding: 10px; color: #666;\">No devices recorded</div>\n";
+    }
+    String html = "            <table style=\"width: 100%; border-collapse: collapse; font-size: 13px; background: white;\">\n";
+    html += "                <tr style=\"text-align: left; border-bottom: 1px solid #ddd;\"><th>Name</th><th>Type</th><th>Last ping</th><th>IP</th><th>Status</th></tr>\n";
+    html += rows;
+    html += "            </table>\n";
+    html += "            <dialog id=\"statusDialog\" style=\"max-width: 90%; border-radius: 6px;\">\n";
+    html += "                <pre id=\"statusBody\" style=\"white-space: pre-wrap; word-break: break-all; font-size: 12px; margin: 0 0 8px 0; font-family: monospace;\"></pre>\n";
+    html += "                <button type=\"button\" id=\"statusQuit\" style=\"margin-top: 0;\">Quit</button>\n";
+    html += "            </dialog>\n";
+    return html;
+}
+
+bool WebManager::isKnownPeer(const IPAddress &ip) const {
+    for (size_t i = 0; i < MAX_PEERS; i++) {
+        if (_peers[i].used && _peers[i].ip == ip) {
+            return true;
+        }
+    }
+    return false;
+}
+
+int WebManager::fetchPeerStatus(const IPAddress &ip, String &body) {
+    // Plain WiFiClient request (HTTPClient.h pulls mbedtls headers that clash with the -DX build flag)
+    const int maxResponseSize = 4096;
+    WiFiClient peer;
+    if (!peer.connect(ip, 80, 2000)) {
+        return -1;
+    }
+
+    peer.print("GET /api/status HTTP/1.1\r\nHost: " + ip.toString() + "\r\nConnection: close\r\n\r\n");
+
+    String response = "";
+    unsigned long deadline = millis() + 3000;
+    while ((peer.connected() || peer.available()) && millis() < deadline && (int)response.length() < maxResponseSize) {
+        if (peer.available()) {
+            response += (char)peer.read();
+        } else {
+            delay(1);
+        }
+    }
+    peer.stop();
+
+    // Status line: "HTTP/1.1 200 OK"
+    int firstSpace = response.indexOf(' ');
+    int headersEnd = response.indexOf("\r\n\r\n");
+    if (firstSpace < 0 || headersEnd < 0) {
+        return -2;
+    }
+    int code = response.substring(firstSpace + 1, firstSpace + 4).toInt();
+    body = response.substring(headersEnd + 4);
+    return code;
+}
 
 WebManager::~WebManager() {
     stop();
@@ -35,7 +165,9 @@ bool WebManager::init(const String &requesterNumber) {
 
     if (ssid.length() == 0) {
         log_e("[WEB] WiFi SSID not configured");
-        _sender.send(requesterNumber, "ERROR: WiFi SSID not configured. Use: CONFIG WIFI_SSID <ssid>");
+        if (requesterNumber.length() > 0) {
+            _sender.send(requesterNumber, "ERROR: WiFi SSID not configured. Use: CONFIG WIFI_SSID <ssid>");
+        }
         return false;
     }
 
@@ -52,7 +184,9 @@ bool WebManager::init(const String &requesterNumber) {
 
     if (WiFi.status() != WL_CONNECTED) {
         log_e("[WEB] Failed to connect to WiFi");
-        _sender.send(requesterNumber, "ERROR: Failed to connect to WiFi. Check SSID and password.");
+        if (requesterNumber.length() > 0) {
+            _sender.send(requesterNumber, "ERROR: Failed to connect to WiFi. Check SSID and password.");
+        }
         return false;
     }
 
@@ -72,8 +206,10 @@ bool WebManager::init(const String &requesterNumber) {
     _serverURL = "http://" + WiFi.localIP().toString() + "/" + _accessToken + "/";
     log_i("[WEB] Web server started at: %s", _serverURL.c_str());
 
-    // Send URL to requester
-    _sender.send(requesterNumber, "OK: Web interface started\n" + _serverURL);
+    // Send URL to requester (none when started automatically at boot)
+    if (requesterNumber.length() > 0) {
+        _sender.send(requesterNumber, "OK: Web interface started\n" + _serverURL);
+    }
 
     return true;
 }
@@ -121,13 +257,15 @@ void WebManager::handleClient(WiFiClient client) {
     String request = "";
     unsigned long timeout = millis() + 2000;  // 2 second timeout
     
-    while (client.connected() && millis() < timeout) {
+    while (client.connected() && millis() < timeout && request.length() < MAX_HEADER_SIZE) {
         if (client.available()) {
             char c = client.read();
             request += c;
             if (request.endsWith("\r\n\r\n")) {
                 break;
             }
+        } else {
+            delay(1);
         }
     }
 
@@ -139,46 +277,41 @@ void WebManager::handleClient(WiFiClient client) {
     // Parse request
     String method, path, query;
     if (!parseHttpRequest(request, method, path, query)) {
-        client.stop();
+        sendResponse(client, "400 Bad Request", "text/plain", "400 Bad Request");
         return;
     }
 
     log_i("[WEB] %s %s", method.c_str(), path.c_str());
 
-    // Handle GET /api/ping (no access token required)
-    if (method == "GET" && path == "/api/ping") {
+    // Handle POST /api/ping (no access token required)
+    // Body: {"IP":"<ip address>","name":"<device name>","type":"<device type>"} (name and type truncated to 11 chars)
+    if (method == "POST" && path == "/api/ping") {
+        String postBody = readRequestBody(client, request, 256);
+
+        String status = "200 OK";
         String response = "SmsRelay";
-        client.println("HTTP/1.1 200 OK");
-        client.println("Content-Type: text/plain");
-        client.println("Content-Length: " + String(response.length()));
-        client.println("Connection: close");
-        client.println();
-        client.print(response);
-        delay(100);
-        client.stop();
+        JsonDocument doc;
+        DeserializationError err = deserializeJson(doc, postBody);
+        String ipStr = doc["IP"] | "";
+        String name = doc["name"] | "";
+        String type = doc["type"] | "";
+        IPAddress peerIp;
+        if (err || !peerIp.fromString(ipStr)) {
+            log_w("[WEB] Invalid ping request");
+            status = "400 Bad Request";
+            response = "Expected JSON with IP and name";
+        } else {
+            registerPeer(peerIp, name, type);
+        }
+
+        sendResponse(client, status, "text/plain", response);
         return;
     }
 
     // Handle POST /api/alerte (no access token required)
     // Body: {"module":"<name>","text":"<message>"}
     if (method == "POST" && path == "/api/alerte") {
-        const int maxBodySize = 1024;
-        int contentLength = 0;
-        String lowerRequest = request;
-        lowerRequest.toLowerCase();
-        int clPos = lowerRequest.indexOf("content-length:");
-        if (clPos >= 0) {
-            contentLength = lowerRequest.substring(clPos + 15).toInt();
-        }
-
-        String postBody = "";
-        unsigned long bodyTimeout = millis() + 1000;
-        while (client.connected() && millis() < bodyTimeout && (int)postBody.length() < maxBodySize &&
-               (contentLength <= 0 || (int)postBody.length() < contentLength)) {
-            if (client.available()) {
-                postBody += (char)client.read();
-            }
-        }
+        String postBody = readRequestBody(client, request, 1024);
 
         String status = "200 OK";
         String response;
@@ -197,29 +330,14 @@ void WebManager::handleClient(WiFiClient client) {
             response = "{\"status\":\"ok\"}";
         }
 
-        client.println("HTTP/1.1 " + status);
-        client.println("Content-Type: application/json");
-        client.println("Content-Length: " + String(response.length()));
-        client.println("Connection: close");
-        client.println();
-        client.print(response);
-        delay(100);
-        client.stop();
+        sendResponse(client, status, "application/json", response);
         return;
     }
 
     // Check if path contains the access token
     if (!path.startsWith("/" + _accessToken)) {
         log_w("[WEB] Access denied - invalid token in path: %s", path.c_str());
-        String notFound = "403 Forbidden";
-        client.println("HTTP/1.1 403 Forbidden");
-        client.println("Content-Type: text/plain");
-        client.println("Content-Length: " + String(notFound.length()));
-        client.println("Connection: close");
-        client.println();
-        client.println(notFound);
-        delay(100);
-        client.stop();
+        sendResponse(client, "403 Forbidden", "text/plain", "403 Forbidden");
         return;
     }
 
@@ -231,86 +349,33 @@ void WebManager::handleClient(WiFiClient client) {
 
     // Handle GET /
     if (method == "GET" && (routePath == "/" || routePath == "")) {
-        String html = generateHTMLForm();
-        
-        client.println("HTTP/1.1 200 OK");
-        client.println("Content-Type: text/html; charset=UTF-8");
-        client.println("Content-Length: " + String(html.length()));
-        client.println("Connection: close");
-        client.println();
-        client.println(html);
+        sendResponse(client, "200 OK", "text/html; charset=UTF-8", generateHTMLForm());
     }
     // Handle POST /api/config
     else if (method == "POST" && routePath == "/api/config") {
-        // Read POST body
-        String postBody = "";
-        unsigned long bodyTimeout = millis() + 1000;
-        
-        while (client.connected() && millis() < bodyTimeout) {
-            if (client.available()) {
-                postBody += (char)client.read();
-            }
-        }
-
-        String response = handleFormSubmit(postBody);
-        
-        client.println("HTTP/1.1 200 OK");
-        client.println("Content-Type: application/json");
-        client.println("Content-Length: " + String(response.length()));
-        client.println("Connection: close");
-        client.println();
-        client.println(response);
+        String postBody = readRequestBody(client, request, 2048);
+        sendResponse(client, "200 OK", "application/json", handleFormSubmit(postBody));
     }
     // Handle POST /api/restart
     else if (method == "POST" && routePath == "/api/restart") {
         log_i("[WEB] Restart request received");
-        String response = "{\"status\":\"ok\",\"message\":\"Device restarting\"}";
-        
-        client.println("HTTP/1.1 200 OK");
-        client.println("Content-Type: application/json");
-        client.println("Content-Length: " + String(response.length()));
-        client.println("Connection: close");
-        client.println();
-        client.println(response);
-        
-        delay(100);
-        client.stop();
-        
-        // Restart device after sending response
+        sendResponse(client, "200 OK", "application/json", "{\"status\":\"ok\",\"message\":\"Device restarting\"}");
+
+        // Restart device after the response has been sent and the connection closed
         delay(500);
         _modem.restartDevice();
-        return;
     }
     // Handle POST /api/weboff
     else if (method == "POST" && routePath == "/api/weboff") {
         log_i("[WEB] Web off request received");
-        String response = "{\"status\":\"ok\",\"message\":\"Web server stopping\"}";
-        
-        client.println("HTTP/1.1 200 OK");
-        client.println("Content-Type: application/json");
-        client.println("Content-Length: " + String(response.length()));
-        client.println("Connection: close");
-        client.println();
-        client.println(response);
-        
-        delay(100);
-        client.stop();
-        
-        // Stop web server after sending response
+        sendResponse(client, "200 OK", "application/json", "{\"status\":\"ok\",\"message\":\"Web server stopping\"}");
+
+        // Stop web server after the response has been sent and the connection closed
         stop();
-        return;
     }
     // Handle POST /api/ack
     else if (method == "POST" && routePath == "/api/ack") {
-        // Read POST body
-        String postBody = "";
-        unsigned long bodyTimeout = millis() + 1000;
-        
-        while (client.connected() && millis() < bodyTimeout) {
-            if (client.available()) {
-                postBody += (char)client.read();
-            }
-        }
+        String postBody = readRequestBody(client, request, 256);
 
         // Parse alert code from POST body: "code=123"
         String code = "";
@@ -335,31 +400,79 @@ void WebManager::handleClient(WiFiClient client) {
             }
         }
         
-        client.println("HTTP/1.1 200 OK");
-        client.println("Content-Type: application/json");
-        client.println("Content-Length: " + String(response.length()));
-        client.println("Connection: close");
-        client.println();
-        client.println(response);
-        delay(100);
-        client.stop();
+        sendResponse(client, "200 OK", "application/json", response);
         log_i("[WEB] ACK response sent");
-        return;
+    }
+    // Handle GET /api/status?ip=<known device ip>: relay the module's /api/status JSON
+    else if (method == "GET" && routePath == "/api/status") {
+        IPAddress peerIp;
+        int ipPos = query.indexOf("ip=");
+        String ipStr = (ipPos >= 0) ? query.substring(ipPos + 3) : String("");
+        int ampPos = ipStr.indexOf('&');
+        if (ampPos >= 0) ipStr = ipStr.substring(0, ampPos);
+
+        if (!peerIp.fromString(ipStr) || !isKnownPeer(peerIp)) {
+            sendResponse(client, "404 Not Found", "application/json", "{\"error\":\"Unknown device\"}");
+        } else {
+            String body;
+            int code = fetchPeerStatus(peerIp, body);
+            if (code == 200) {
+                sendResponse(client, "200 OK", "application/json", body);
+            } else {
+                sendResponse(client, "502 Bad Gateway", "application/json",
+                             "{\"error\":\"Device request failed\",\"code\":" + String(code) + "}");
+            }
+        }
     }
     // 404
     else {
-        String notFound = "404 Not Found";
-        client.println("HTTP/1.1 404 Not Found");
-        client.println("Content-Type: text/plain");
-        client.println("Content-Length: " + String(notFound.length()));
-        client.println("Connection: close");
-        client.println();
-        client.println(notFound);
+        sendResponse(client, "404 Not Found", "text/plain", "404 Not Found");
     }
 
-    delay(100);
-    client.stop();
     log_i("[WEB] Client disconnected");
+}
+
+String WebManager::readRequestBody(WiFiClient &client, const String &request, int maxSize) {
+    int contentLength = -1;
+    String lowerRequest = request;
+    lowerRequest.toLowerCase();
+    int clPos = lowerRequest.indexOf("content-length:");
+    if (clPos >= 0) {
+        contentLength = lowerRequest.substring(clPos + 15).toInt();
+    }
+    if (contentLength < 0 || contentLength > maxSize) {
+        // Unknown or oversized length: read at most maxSize bytes (until timeout/disconnect)
+        contentLength = maxSize;
+    }
+
+    String body = "";
+    unsigned long bodyTimeout = millis() + 1000;
+    while ((int)body.length() < contentLength && millis() < bodyTimeout) {
+        if (client.available()) {
+            body += (char)client.read();
+        } else if (!client.connected()) {
+            break;
+        } else {
+            delay(1);
+        }
+    }
+    return body;
+}
+
+void WebManager::sendResponse(WiFiClient &client, const String &status, const String &contentType, const String &body) {
+    String header = "HTTP/1.1 " + status + "\r\n";
+    header += "Content-Type: " + contentType + "\r\n";
+    header += "Content-Length: " + String(body.length()) + "\r\n";
+    header += "Connection: close\r\n\r\n";
+    client.print(header);
+    client.print(body);
+
+    // Let the TCP stack transmit, discard any unread request data (avoids a RST), then close
+    delay(100);
+    while (client.available()) {
+        client.read();
+    }
+    client.stop();
 }
 
 bool WebManager::parseHttpRequest(const String &request, String &method, String &path, String &query) {
@@ -610,6 +723,12 @@ String WebManager::generateHTMLForm() {
     }
     html += "        </div>\n";
     
+    // Known devices (recorded from /api/ping)
+    html += "        <div class=\"section sections-full\" style=\"border-left-color: #28a745; background: #f4fbf6;\">\n";
+    html += "            <div class=\"section-title\" style=\"color: #28a745;\">Known Devices</div>\n";
+    html += generatePeersHTML();
+    html += "        </div>\n";
+
     html += "        <form id=\"configForm\" data-token=\"" + _accessToken + "\">\n";
     html += "        <script>const ACCESS_TOKEN = '" + _accessToken + "';</script>\n";
     
@@ -852,6 +971,31 @@ String WebManager::generateHTMLForm() {
     html += "                }\n";
     html += "            });\n";
     html += "        });\n";
+    html += "        \n";
+    html += "        // Known devices: show the raw /api/status JSON in a dialog\n";
+    html += "        const statusDialog = document.getElementById('statusDialog');\n";
+    html += "        if (statusDialog) {\n";
+    html += "            document.getElementById('statusQuit').addEventListener('click', () => statusDialog.close());\n";
+    html += "            document.querySelectorAll('.status-btn').forEach(btn => {\n";
+    html += "                btn.addEventListener('click', async function() {\n";
+    html += "                    const ip = this.getAttribute('data-ip');\n";
+    html += "                    const body = document.getElementById('statusBody');\n";
+    html += "                    body.textContent = 'Loading ' + ip + ' ...';\n";
+    html += "                    statusDialog.showModal();\n";
+    html += "                    try {\n";
+    html += "                        const response = await fetch('/' + ACCESS_TOKEN + '/api/status?ip=' + encodeURIComponent(ip));\n";
+    html += "                        const text = await response.text();\n";
+    html += "                        try {\n";
+    html += "                            body.textContent = JSON.stringify(JSON.parse(text), null, 2);\n";
+    html += "                        } catch (parseError) {\n";
+    html += "                            body.textContent = text;\n";
+    html += "                        }\n";
+    html += "                    } catch (error) {\n";
+    html += "                        body.textContent = 'Network error: ' + error.message;\n";
+    html += "                    }\n";
+    html += "                });\n";
+    html += "            });\n";
+    html += "        }\n";
     html += "    </script>\n";
     html += "</body>\n</html>\n";
 

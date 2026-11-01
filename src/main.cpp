@@ -79,6 +79,9 @@ void setup()
 
     // Link WebManager to ClockManager so NTP resync won't disconnect the web server
     clockManager.setWebManager(&webManager);
+
+    // Web server is on by default (no requester: URL is only logged; send "WEB ON" by SMS to get it)
+    webManager.init("");
 }
 
 

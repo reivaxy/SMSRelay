@@ -87,6 +87,9 @@ private:
     // Returns false if the table is full and the IP is new
     bool registerPeer(const IPAddress &ip, const String &name, const String &type);
 
+    // Remove a peer from the table, returns false if the IP is unknown
+    bool removePeer(const IPAddress &ip);
+
     // True if the IP is in the known devices table
     bool isKnownPeer(const IPAddress &ip) const;
 

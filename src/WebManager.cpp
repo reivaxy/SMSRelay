@@ -90,16 +90,19 @@ String WebManager::generatePeersHTML() {
             rows += "<br><span class=\"dev-type\">(" + htmlEscape(String(_peers[i].type)) + ")</span>";
         }
         rows += "</td>";
-        rows += "<td>" + formatPeerTimestamp(_peers[i].timestamp) + "</td>";
+        String lastPing = formatPeerTimestamp(_peers[i].timestamp);
+        lastPing.replace(" ", "<br>");  // date on the first line, time on the second
+        rows += "<td>" + lastPing + "</td>";
         rows += "<td><a class=\"btn btn-sm\" href=\"http://" + ip + "/\" target=\"_blank\" rel=\"noopener\">home</a></td>";
         rows += "<td><button type=\"button\" class=\"btn-sm status-btn\" data-ip=\"" + ip + "\">status</button></td>";
+        rows += "<td><button type=\"button\" class=\"btn-sm btn-danger remove-btn\" data-ip=\"" + ip + "\" data-name=\"" + htmlEscape(String(_peers[i].name)) + "\">X</button></td>";
         rows += "</tr>\n";
     }
     if (rows.length() == 0) {
         return "            <div class=\"empty\">No devices recorded</div>\n";
     }
     String html = "            <table class=\"devices\">\n";
-    html += "                <tr><th>Name</th><th>Last ping</th><th>Home</th><th>Status</th></tr>\n";
+    html += "                <tr><th>Name</th><th>Last ping</th><th>Home</th><th>Status</th><th>Remove</th></tr>\n";
     html += rows;
     html += "            </table>\n";
     html += "            <dialog id=\"statusDialog\">\n";
@@ -107,6 +110,19 @@ String WebManager::generatePeersHTML() {
     html += "                <button type=\"button\" id=\"statusQuit\">Quit</button>\n";
     html += "            </dialog>\n";
     return html;
+}
+
+bool WebManager::removePeer(const IPAddress &ip) {
+    for (size_t i = 0; i < MAX_PEERS; i++) {
+        if (_peers[i].used && _peers[i].ip == ip) {
+            _peers[i].used = false;
+            _peers[i].name[0] = '\0';
+            _peers[i].type[0] = '\0';
+            _peers[i].timestamp = 0;
+            return true;
+        }
+    }
+    return false;
 }
 
 bool WebManager::isKnownPeer(const IPAddress &ip) const {
@@ -409,6 +425,21 @@ void WebManager::handleClient(WiFiClient client) {
         
         sendResponse(client, "200 OK", "application/json", response);
         log_i("[WEB] ACK response sent");
+    }
+    // Handle POST /api/removepeer: forget a known device (body: ip=<address>)
+    else if (method == "POST" && routePath == "/api/removepeer") {
+        String postBody = readRequestBody(client, request, 128);
+        IPAddress peerIp;
+        int ipPos = postBody.indexOf("ip=");
+        String ipStr = (ipPos >= 0) ? postBody.substring(ipPos + 3) : String("");
+        int ampPos = ipStr.indexOf('&');
+        if (ampPos >= 0) ipStr = ipStr.substring(0, ampPos);
+
+        if (peerIp.fromString(ipStr) && removePeer(peerIp)) {
+            sendResponse(client, "200 OK", "application/json", "{\"status\":\"ok\"}");
+        } else {
+            sendResponse(client, "404 Not Found", "application/json", "{\"status\":\"error\",\"message\":\"Unknown device\"}");
+        }
     }
     // Handle GET /api/status?ip=<known device ip>: relay the module's /api/status JSON
     else if (method == "GET" && routePath == "/api/status") {
@@ -842,6 +873,32 @@ String WebManager::generateHomePage() {
     html += "                    statusDiv.className = 'status error';\n";
     html += "                    statusDiv.textContent = 'Network error: ' + error.message;\n";
     html += "                    statusDiv.style.display = 'block';\n";
+    html += "                }\n";
+    html += "            });\n";
+    html += "        });\n";
+    html += "        \n";
+    html += "        // Known devices: confirm, then remove a device from the list\n";
+    html += "        document.querySelectorAll('.remove-btn').forEach(btn => {\n";
+    html += "            btn.addEventListener('click', async function() {\n";
+    html += "                const ip = this.getAttribute('data-ip');\n";
+    html += "                const name = this.getAttribute('data-name');\n";
+    html += "                if (!confirm('Remove ' + (name || ip) + ' from the list?')) return;\n";
+    html += "                const params = new URLSearchParams();\n";
+    html += "                params.append('ip', ip);\n";
+    html += "                try {\n";
+    html += "                    const response = await fetch('/' + ACCESS_TOKEN + '/api/removepeer', {\n";
+    html += "                        method: 'POST',\n";
+    html += "                        body: params.toString(),\n";
+    html += "                        headers: {'Content-Type': 'application/x-www-form-urlencoded'}\n";
+    html += "                    });\n";
+    html += "                    const result = JSON.parse(await response.text());\n";
+    html += "                    if (result.status === 'ok') {\n";
+    html += "                        location.reload();\n";
+    html += "                    } else {\n";
+    html += "                        alert('Error: ' + (result.message || 'Unknown error'));\n";
+    html += "                    }\n";
+    html += "                } catch (error) {\n";
+    html += "                    alert('Network error: ' + error.message);\n";
     html += "                }\n";
     html += "            });\n";
     html += "        });\n";

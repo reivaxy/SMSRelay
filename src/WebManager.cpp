@@ -380,6 +380,11 @@ void WebManager::handleClient(WiFiClient client) {
         // Stop web server after the response has been sent and the connection closed
         stop();
     }
+    // Handle POST /api/clearalerts
+    else if (method == "POST" && routePath == "/api/clearalerts") {
+        _alertManager.clearAll();
+        sendResponse(client, "200 OK", "application/json", "{\"status\":\"ok\",\"message\":\"All alerts cleared\"}");
+    }
     // Handle POST /api/ack
     else if (method == "POST" && routePath == "/api/ack") {
         String postBody = readRequestBody(client, request, 256);
@@ -759,6 +764,10 @@ String WebManager::generateHomePage() {
     html += "        <div class=\"section sections-full sec-alerts\">\n";
     html += "            <div class=\"section-title\">Active Alerts</div>\n";
     html += generateAlertsHTML();
+    bool hasAlerts = _alertManager.hasPendingAlerts();
+    if (hasAlerts) {
+        html += "            <button type=\"button\" id=\"clearAlertsBtn\" class=\"btn-danger\">Clear alerts</button>\n";
+    }
     html += "        </div>\n";
 
     // Known devices (recorded from /api/ping)
@@ -810,6 +819,27 @@ String WebManager::generateHomePage() {
 
     html += "    <script>\n";
     html += "        const ACCESS_TOKEN = '" + _accessToken + "';\n";
+    html += "        const clearAlertsBtn = document.getElementById('clearAlertsBtn');\n";
+    html += "        if (clearAlertsBtn) clearAlertsBtn.addEventListener('click', async function() {\n";
+    html += "            if (!confirm('Clear all active alerts?')) return;\n";
+    html += "            try {\n";
+    html += "                const response = await fetch('/' + ACCESS_TOKEN + '/api/clearalerts', { method: 'POST' });\n";
+    html += "                const result = await response.json();\n";
+    html += "                if (response.ok && result.status === 'ok') {\n";
+    html += "                    location.reload();\n";
+    html += "                } else {\n";
+    html += "                    const statusDiv = document.getElementById('status');\n";
+    html += "                    statusDiv.className = 'status error';\n";
+    html += "                    statusDiv.textContent = 'Error: ' + (result.message || 'Unable to clear alerts');\n";
+    html += "                    statusDiv.style.display = 'block';\n";
+    html += "                }\n";
+    html += "            } catch (error) {\n";
+    html += "                const statusDiv = document.getElementById('status');\n";
+    html += "                statusDiv.className = 'status error';\n";
+    html += "                statusDiv.textContent = 'Network error: ' + error.message;\n";
+    html += "                statusDiv.style.display = 'block';\n";
+    html += "            }\n";
+    html += "        });\n";
     html += "        // Handle ACK buttons for alerts\n";
     html += "        document.querySelectorAll('.ack-btn').forEach(btn => {\n";
     html += "            btn.addEventListener('click', async function(e) {\n";
@@ -1106,14 +1136,14 @@ String WebManager::generateRandomToken() {
 }
 
 String WebManager::generateAlertsHTML() {
-    String alertsContent = _alertManager.getPendingAlertsList();
     String html = "";
     
-    // Check if there are no alerts
-    if (alertsContent.indexOf("No pending alerts") >= 0) {
+    if (!_alertManager.hasPendingAlerts()) {
         html += "            <div class=\"no-alerts\">✓ No active alerts</div>\n";
         return html;
     }
+    
+    String alertsContent = _alertManager.getPendingAlertsList();
     
     // Parse the alerts list and format as HTML
     // The format is: "[CODE] TITLE (CAUSE) @ TIME [ACK:N]"
@@ -1277,4 +1307,3 @@ String WebManager::generateLevelsHTML() {
     
     return html;
 }
-

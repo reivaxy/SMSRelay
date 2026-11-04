@@ -49,6 +49,9 @@ public:
     // Get list of pending alerts (for debugging)
     String getPendingAlertsList();
 
+    // Returns true if there is at least one pending alert
+    bool hasPendingAlerts() const;
+
 private:
     struct Alert {
         String code;           // 3-digit unique code

@@ -261,6 +261,10 @@ void AlertManager::clearAll() {
     _pendingAlerts.clear();
 }
 
+bool AlertManager::hasPendingAlerts() const {
+    return !_pendingAlerts.empty();
+}
+
 String AlertManager::getPendingAlertsList() {
     if (_pendingAlerts.empty()) {
         return "No pending alerts";

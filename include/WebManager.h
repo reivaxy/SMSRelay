@@ -37,6 +37,9 @@ public:
     // Get the web server URL (only valid when server is running)
     String getServerURL() const;
 
+    // Get the numbered list of known module names
+    String getModuleList() const;
+
     // Call this from loop() to handle incoming web requests
     void check();
 
@@ -86,4 +89,3 @@ private:
     String                   _accessToken;
     ModuleManager            _moduleManager;
 };
-

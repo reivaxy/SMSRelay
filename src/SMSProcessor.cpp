@@ -124,6 +124,9 @@ void SMSProcessor::process(const ReceivedSMS &sms)
     else if (textUpper == "LISTPHONES") {
         handleListPhonesCommand(sms.number);
     }
+    else if (textUpper == "LISTMODULES") {
+        handleListModulesCommand(sms.number);
+    }
     else if (textUpper == "LISTALERTS") {
         handleListAlertsCommand(sms.number);
     }
@@ -645,6 +648,10 @@ void SMSProcessor::handleListPhonesCommand(const String &senderNumber) {
     _sender.send(senderNumber, response);
 }
 
+void SMSProcessor::handleListModulesCommand(const String &senderNumber) {
+    _sender.send(senderNumber, _webManager.getModuleList());
+}
+
 void SMSProcessor::handleListAlertsCommand(const String &senderNumber) {
     log_i("[CMD] List alerts requested");
     String response = _alertManager.getPendingAlertsList();
@@ -665,6 +672,7 @@ void SMSProcessor::handleHelpCommand(const String &senderNumber) {
     helpMsg1 += "LEVELS - Sensor levels\n";
     helpMsg1 += "CONFIG - View params\n";
     helpMsg1 += "LISTPHONES - List phones\n";
+    helpMsg1 += "LISTMODULES - List modules\n";
     helpMsg1 += "LISTALERTS - List pending alerts\n";
     helpMsg1 += "CLEAR - Reset alerts\n";
     helpMsg1 += "ACK <code> - Acknowledge alert\n";
@@ -918,5 +926,4 @@ void SMSProcessor::handleNotifCommand(const String &rest, const String &senderNu
         _sender.send(senderNumber, "ERROR: Failed to send notification: " + _pushover.getLastError());
     }
 }
-
 

@@ -108,6 +108,10 @@ String WebManager::getServerURL() const {
     return _serverURL;
 }
 
+String WebManager::getModuleList() const {
+    return _moduleManager.getModuleList();
+}
+
 void WebManager::check() {
     if (!_isRunning || !_server) {
         return;

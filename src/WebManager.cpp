@@ -112,6 +112,10 @@ String WebManager::getModuleList() const {
     return _moduleManager.getModuleList();
 }
 
+int WebManager::fetchModuleStatusByNumber(int number, String &body) {
+    return _moduleManager.fetchModuleStatusByNumber(number, body);
+}
+
 void WebManager::check() {
     if (!_isRunning || !_server) {
         return;

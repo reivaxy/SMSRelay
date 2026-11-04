@@ -128,6 +128,21 @@ int ModuleManager::fetchModuleStatus(const IPAddress &ip, String &body) {
     return code;
 }
 
+int ModuleManager::fetchModuleStatusByNumber(int number, String &body) {
+    if (number <= 0) {
+        return -3;
+    }
+
+    int moduleNumber = 0;
+    for (size_t i = 0; i < MAX_MODULES; i++) {
+        if (!_modules[i].used) continue;
+        if (++moduleNumber == number) {
+            return fetchModuleStatus(_modules[i].ip, body);
+        }
+    }
+    return -3;
+}
+
 void ModuleManager::check() {
     if (WiFi.status() != WL_CONNECTED) {
         return;

@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WiFiServer.h>
+#include "ModuleManager.h"
 
 // Forward declarations
 class ConfigManager;
@@ -16,18 +17,7 @@ class MainPowerCheck;
 
 class WebManager {
 public:
-    static constexpr size_t MAX_PEERS = 10;
-    static constexpr size_t PEER_NAME_LEN = 11;
-    static constexpr size_t PEER_TYPE_LEN = 11;
     static constexpr size_t MAX_HEADER_SIZE = 2048;
-
-    struct Peer {
-        IPAddress ip;
-        char      name[PEER_NAME_LEN + 1];
-        char      type[PEER_TYPE_LEN + 1];
-        unsigned long timestamp;  // Local epoch time of last ping (0 if clock not set)
-        bool      used;
-    };
 
     WebManager(ConfigManager &configManager, SMSSender &sender, PhoneNumberManager &phoneNumberManager, AlertManager &alertManager, Modem &modem, ClockManager &clockManager,
                TemperatureHumidityProcessor &tempHumidityProcessor, BatteryProcessor &batteryProcessor, MainPowerCheck &mainPowerCheck);
@@ -80,22 +70,6 @@ private:
     // Generate HTML for current sensor levels
     String generateLevelsHTML();
 
-    // Generate HTML for the list of devices that pinged this server
-    String generatePeersHTML();
-
-    // Store the peer IP and name, or update the name if the IP is already known
-    // Returns false if the table is full and the IP is new
-    bool registerPeer(const IPAddress &ip, const String &name, const String &type);
-
-    // Remove a peer from the table, returns false if the IP is unknown
-    bool removePeer(const IPAddress &ip);
-
-    // True if the IP is in the known devices table
-    bool isKnownPeer(const IPAddress &ip) const;
-
-    // GET http://<ip>/api/status on a known device; returns HTTP code (<=0 on connection error)
-    int fetchPeerStatus(const IPAddress &ip, String &body);
-
     WiFiServer              *_server;
     ConfigManager           &_configManager;
     SMSSender               &_sender;
@@ -110,6 +84,6 @@ private:
     String                   _requesterNumber;
     String                   _serverURL;
     String                   _accessToken;
-    Peer                     _peers[MAX_PEERS];
+    ModuleManager            _moduleManager;
 };
 

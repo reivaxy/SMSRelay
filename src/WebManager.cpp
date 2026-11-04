@@ -8,162 +8,13 @@
 #include "TemperatureHumidityProcessor.h"
 #include "BatteryProcessor.h"
 #include "MainPowerCheck.h"
-#include <ctime>
 #include <ArduinoJson.h>
-
-static String htmlEscape(const String &s) {
-    String out = "";
-    for (int i = 0; i < (int)s.length(); i++) {
-        char c = s[i];
-        switch (c) {
-            case '&': out += "&amp;"; break;
-            case '<': out += "&lt;"; break;
-            case '>': out += "&gt;"; break;
-            case '"': out += "&quot;"; break;
-            case '\'': out += "&#39;"; break;
-            default: out += c;
-        }
-    }
-    return out;
-}
 
 WebManager::WebManager(ConfigManager &configManager, SMSSender &sender, PhoneNumberManager &phoneNumberManager, AlertManager &alertManager, Modem &modem, ClockManager &clockManager,
                        TemperatureHumidityProcessor &tempHumidityProcessor, BatteryProcessor &batteryProcessor, MainPowerCheck &mainPowerCheck)
     : _server(nullptr), _configManager(configManager), _sender(sender), _phoneNumberManager(phoneNumberManager), _alertManager(alertManager), _modem(modem), _clockManager(clockManager),
       _tempHumidityProcessor(tempHumidityProcessor), _batteryProcessor(batteryProcessor), _mainPowerCheck(mainPowerCheck),
-      _isRunning(false), _requesterNumber(""), _serverURL(""), _accessToken("") {
-    for (size_t i = 0; i < MAX_PEERS; i++) {
-        _peers[i].used = false;
-        _peers[i].name[0] = '\0';
-        _peers[i].type[0] = '\0';
-        _peers[i].timestamp = 0;
-    }
-}
-
-bool WebManager::registerPeer(const IPAddress &ip, const String &name, const String &type) {
-    int freeSlot = -1;
-    unsigned long now = _clockManager.isInitialized() ? _clockManager.getCurrentTime() : 0;
-    for (size_t i = 0; i < MAX_PEERS; i++) {
-        if (_peers[i].used && _peers[i].ip == ip) {
-            strlcpy(_peers[i].name, name.c_str(), sizeof(_peers[i].name));
-            strlcpy(_peers[i].type, type.c_str(), sizeof(_peers[i].type));
-            _peers[i].timestamp = now;
-            return true;
-        }
-        if (!_peers[i].used && freeSlot < 0) {
-            freeSlot = (int)i;
-        }
-    }
-    if (freeSlot < 0) {
-        log_w("[WEB] Peer table full, ignoring %s", ip.toString().c_str());
-        return false;
-    }
-    _peers[freeSlot].used = true;
-    _peers[freeSlot].ip = ip;
-    strlcpy(_peers[freeSlot].name, name.c_str(), sizeof(_peers[freeSlot].name));
-    strlcpy(_peers[freeSlot].type, type.c_str(), sizeof(_peers[freeSlot].type));
-    _peers[freeSlot].timestamp = now;
-    return true;
-}
-
-static String formatPeerTimestamp(unsigned long epoch) {
-    if (epoch == 0) {
-        return "-";
-    }
-    time_t t = (time_t)epoch;
-    struct tm *timeinfo = gmtime(&t);  // Epoch already includes local offsets
-    char buffer[24];
-    snprintf(buffer, sizeof(buffer), "%04d-%02d-%02d %02d:%02d:%02d",
-             timeinfo->tm_year + 1900, timeinfo->tm_mon + 1, timeinfo->tm_mday,
-             timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec);
-    return String(buffer);
-}
-
-String WebManager::generatePeersHTML() {
-    String rows = "";
-    for (size_t i = 0; i < MAX_PEERS; i++) {
-        if (!_peers[i].used) continue;
-        String ip = _peers[i].ip.toString();
-        rows += "                <tr>";
-        rows += "<td>" + htmlEscape(String(_peers[i].name));
-        if (_peers[i].type[0] != '\0') {
-            rows += "<br><span class=\"dev-type\">(" + htmlEscape(String(_peers[i].type)) + ")</span>";
-        }
-        rows += "</td>";
-        String lastPing = formatPeerTimestamp(_peers[i].timestamp);
-        lastPing.replace(" ", "<br>");  // date on the first line, time on the second
-        rows += "<td>" + lastPing + "</td>";
-        rows += "<td><a class=\"btn btn-sm\" href=\"http://" + ip + "/\" target=\"_blank\" rel=\"noopener\">home</a></td>";
-        rows += "<td><button type=\"button\" class=\"btn-sm status-btn\" data-ip=\"" + ip + "\">status</button></td>";
-        rows += "<td><button type=\"button\" class=\"btn-sm btn-danger remove-btn\" data-ip=\"" + ip + "\" data-name=\"" + htmlEscape(String(_peers[i].name)) + "\">X</button></td>";
-        rows += "</tr>\n";
-    }
-    if (rows.length() == 0) {
-        return "            <div class=\"empty\">No devices recorded</div>\n";
-    }
-    String html = "            <table class=\"devices\">\n";
-    html += "                <tr><th>Name</th><th>Last ping</th><th>Home</th><th>Status</th><th>Remove</th></tr>\n";
-    html += rows;
-    html += "            </table>\n";
-    html += "            <dialog id=\"statusDialog\">\n";
-    html += "                <pre id=\"statusBody\"></pre>\n";
-    html += "                <button type=\"button\" id=\"statusQuit\">Quit</button>\n";
-    html += "            </dialog>\n";
-    return html;
-}
-
-bool WebManager::removePeer(const IPAddress &ip) {
-    for (size_t i = 0; i < MAX_PEERS; i++) {
-        if (_peers[i].used && _peers[i].ip == ip) {
-            _peers[i].used = false;
-            _peers[i].name[0] = '\0';
-            _peers[i].type[0] = '\0';
-            _peers[i].timestamp = 0;
-            return true;
-        }
-    }
-    return false;
-}
-
-bool WebManager::isKnownPeer(const IPAddress &ip) const {
-    for (size_t i = 0; i < MAX_PEERS; i++) {
-        if (_peers[i].used && _peers[i].ip == ip) {
-            return true;
-        }
-    }
-    return false;
-}
-
-int WebManager::fetchPeerStatus(const IPAddress &ip, String &body) {
-    // Plain WiFiClient request (HTTPClient.h pulls mbedtls headers that clash with the -DX build flag)
-    const int maxResponseSize = 4096;
-    WiFiClient peer;
-    if (!peer.connect(ip, 80, 2000)) {
-        return -1;
-    }
-
-    peer.print("GET /api/status HTTP/1.1\r\nHost: " + ip.toString() + "\r\nConnection: close\r\n\r\n");
-
-    String response = "";
-    unsigned long deadline = millis() + 3000;
-    while ((peer.connected() || peer.available()) && millis() < deadline && (int)response.length() < maxResponseSize) {
-        if (peer.available()) {
-            response += (char)peer.read();
-        } else {
-            delay(1);
-        }
-    }
-    peer.stop();
-
-    // Status line: "HTTP/1.1 200 OK"
-    int firstSpace = response.indexOf(' ');
-    int headersEnd = response.indexOf("\r\n\r\n");
-    if (firstSpace < 0 || headersEnd < 0) {
-        return -2;
-    }
-    int code = response.substring(firstSpace + 1, firstSpace + 4).toInt();
-    body = response.substring(headersEnd + 4);
-    return code;
+      _isRunning(false), _requesterNumber(""), _serverURL(""), _accessToken(""), _moduleManager(clockManager, alertManager) {
 }
 
 WebManager::~WebManager() {
@@ -262,6 +113,9 @@ void WebManager::check() {
         return;
     }
 
+    // Periodically check that the known modules still answer
+    _moduleManager.check();
+
     // Check for incoming client
     WiFiClient client = _server->available();
     if (client) {
@@ -320,7 +174,7 @@ void WebManager::handleClient(WiFiClient client) {
             status = "400 Bad Request";
             response = "Expected JSON with IP and name";
         } else {
-            registerPeer(peerIp, name, type);
+            _moduleManager.registerModule(peerIp, name, type);
         }
 
         sendResponse(client, status, "text/plain", response);
@@ -435,7 +289,7 @@ void WebManager::handleClient(WiFiClient client) {
         int ampPos = ipStr.indexOf('&');
         if (ampPos >= 0) ipStr = ipStr.substring(0, ampPos);
 
-        if (peerIp.fromString(ipStr) && removePeer(peerIp)) {
+        if (peerIp.fromString(ipStr) && _moduleManager.removeModule(peerIp)) {
             sendResponse(client, "200 OK", "application/json", "{\"status\":\"ok\"}");
         } else {
             sendResponse(client, "404 Not Found", "application/json", "{\"status\":\"error\",\"message\":\"Unknown device\"}");
@@ -449,11 +303,11 @@ void WebManager::handleClient(WiFiClient client) {
         int ampPos = ipStr.indexOf('&');
         if (ampPos >= 0) ipStr = ipStr.substring(0, ampPos);
 
-        if (!peerIp.fromString(ipStr) || !isKnownPeer(peerIp)) {
+        if (!peerIp.fromString(ipStr) || !_moduleManager.isKnownModule(peerIp)) {
             sendResponse(client, "404 Not Found", "application/json", "{\"error\":\"Unknown device\"}");
         } else {
             String body;
-            int code = fetchPeerStatus(peerIp, body);
+            int code = _moduleManager.fetchModuleStatus(peerIp, body);
             if (code == 200) {
                 sendResponse(client, "200 OK", "application/json", body);
             } else {
@@ -722,6 +576,7 @@ static const char PAGE_STYLE[] = R"css(
 
         table.devices { width: 100%; border-collapse: collapse; font-size: 13px; background: white; }
         table.devices th { text-align: left; border-bottom: 1px solid #ddd; }
+        table.devices tr.down { background: #fff5f5; }
         .dev-type { color: #666; font-size: 11px; }
         dialog { max-width: 90%; border-radius: 6px; }
         dialog pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; margin: 0 0 8px 0; font-family: monospace; }
@@ -795,7 +650,7 @@ String WebManager::generateHomePage() {
     // Known devices (recorded from /api/ping)
     html += "        <div class=\"section sections-full sec-devices\">\n";
     html += "            <div class=\"section-title\">Known Devices</div>\n";
-    html += generatePeersHTML();
+    html += _moduleManager.generateModulesHTML();
     html += "        </div>\n";
     
     // Current Levels section

@@ -34,7 +34,6 @@ void SMSProcessor::process(const ReceivedSMS &sms)
     } else {
         perm = _phoneNumberManager.getPermission(sms.number);
     }
-
     String permStr = (perm == PhoneNumberManager::Permission::ADMIN) ? "ADMIN" : 
                      (perm == PhoneNumberManager::Permission::READ) ? "READ" : "NONE";
     log_i("[CMD] From: %s (Permission: %s)", sms.number.c_str(), permStr.c_str());

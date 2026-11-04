@@ -40,6 +40,9 @@ public:
     // Get the numbered list of known module names
     String getModuleList() const;
 
+    // Fetch raw status for a module using its one-based list number
+    int fetchModuleStatusByNumber(int number, String &body);
+
     // Call this from loop() to handle incoming web requests
     void check();
 

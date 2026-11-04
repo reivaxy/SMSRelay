@@ -34,6 +34,7 @@ void SMSProcessor::process(const ReceivedSMS &sms)
     } else {
         perm = _phoneNumberManager.getPermission(sms.number);
     }
+
     String permStr = (perm == PhoneNumberManager::Permission::ADMIN) ? "ADMIN" : 
                      (perm == PhoneNumberManager::Permission::READ) ? "READ" : "NONE";
     log_i("[CMD] From: %s (Permission: %s)", sms.number.c_str(), permStr.c_str());
@@ -126,6 +127,9 @@ void SMSProcessor::process(const ReceivedSMS &sms)
     }
     else if (textUpper == "LISTMODULES") {
         handleListModulesCommand(sms.number);
+    }
+    else if (textUpper == "MODULESTATUS" || textUpper.startsWith("MODULESTATUS ")) {
+        handleModuleStatusCommand(sms.text.substring(12), sms.number);
     }
     else if (textUpper == "LISTALERTS") {
         handleListAlertsCommand(sms.number);
@@ -652,6 +656,44 @@ void SMSProcessor::handleListModulesCommand(const String &senderNumber) {
     _sender.send(senderNumber, _webManager.getModuleList());
 }
 
+void SMSProcessor::handleModuleStatusCommand(const String &rest, const String &senderNumber) {
+    String numberText = rest;
+    numberText.trim();
+
+    if (numberText.length() == 0) {
+        _sender.send(senderNumber, "ERROR: Usage: MODULESTATUS <number>");
+        return;
+    }
+
+    int number = 0;
+    for (unsigned int i = 0; i < numberText.length(); i++) {
+        char digit = numberText[i];
+        if (digit < '0' || digit > '9') {
+            _sender.send(senderNumber, "ERROR: Invalid module number");
+            return;
+        }
+        number = number * 10 + digit - '0';
+        if (number > ModuleManager::MAX_MODULES) {
+            _sender.send(senderNumber, "ERROR: Invalid module number");
+            return;
+        }
+    }
+    if (number == 0) {
+        _sender.send(senderNumber, "ERROR: Invalid module number");
+        return;
+    }
+
+    String body;
+    int code = _webManager.fetchModuleStatusByNumber(number, body);
+    if (code == 200) {
+        _sender.send(senderNumber, body);
+    } else if (code == -3) {
+        _sender.send(senderNumber, "ERROR: No module at that number");
+    } else {
+        _sender.send(senderNumber, "ERROR: Module status request failed (HTTP " + String(code) + ")");
+    }
+}
+
 void SMSProcessor::handleListAlertsCommand(const String &senderNumber) {
     log_i("[CMD] List alerts requested");
     String response = _alertManager.getPendingAlertsList();
@@ -673,6 +715,7 @@ void SMSProcessor::handleHelpCommand(const String &senderNumber) {
     helpMsg1 += "CONFIG - View params\n";
     helpMsg1 += "LISTPHONES - List phones\n";
     helpMsg1 += "LISTMODULES - List modules\n";
+    helpMsg1 += "MODULESTATUS <i> - Module status JSON\n";
     helpMsg1 += "LISTALERTS - List pending alerts\n";
     helpMsg1 += "CLEAR - Reset alerts\n";
     helpMsg1 += "ACK <code> - Acknowledge alert\n";
@@ -926,4 +969,3 @@ void SMSProcessor::handleNotifCommand(const String &rest, const String &senderNu
         _sender.send(senderNumber, "ERROR: Failed to send notification: " + _pushover.getLastError());
     }
 }
-

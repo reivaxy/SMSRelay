@@ -40,6 +40,9 @@ public:
     // GET http://<ip>/api/status on a module; returns HTTP code (<=0 on connection error)
     int fetchModuleStatus(const IPAddress &ip, String &body);
 
+    // Fetch status for a module using its one-based getModuleList() number; returns -3 if absent
+    int fetchModuleStatusByNumber(int number, String &body);
+
     // Generate HTML for the list of modules
     String generateModulesHTML() const;
 

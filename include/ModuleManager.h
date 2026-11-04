@@ -43,6 +43,9 @@ public:
     // Generate HTML for the list of modules
     String generateModulesHTML() const;
 
+    // Generate a numbered list of module names
+    String getModuleList() const;
+
     // Call from loop(): every CHECK_INTERVAL_MS, requests /api/status from each module
     // (one module per call, to keep each call short) and alerts when one does not answer
     void check();

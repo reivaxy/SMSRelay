@@ -23,6 +23,7 @@ class PushoverNotifier;
 //   "LEVELS" - get sensor levels
 //   "CONFIG" - get all parameters and their current values
 //   "LISTPHONES" - list all authorized phone numbers
+//   "LISTMODULES" - list known module names
 //   "CLEAR" - reset all alert SMS sent flags
 //   "HELP" - display list of available commands
 //   "NOTIF <message>" - send a push notification via Pushover
@@ -64,6 +65,7 @@ private:
     void handleAddPhoneCommand(const String &rest, const String &senderNumber);
     void handleRemovePhoneCommand(const String &rest, const String &senderNumber);
     void handleListPhonesCommand(const String &senderNumber);
+    void handleListModulesCommand(const String &senderNumber);
     void handleListAlertsCommand(const String &senderNumber);
     void handleHelpCommand(const String &senderNumber);
     void handleMuteCommand(const String &rest, const String &senderNumber);

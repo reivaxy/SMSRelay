@@ -217,3 +217,13 @@ String ModuleManager::generateModulesHTML() const {
     html += "            </dialog>\n";
     return html;
 }
+
+String ModuleManager::getModuleList() const {
+    String list = "";
+    int number = 0;
+    for (size_t i = 0; i < MAX_MODULES; i++) {
+        if (!_modules[i].used) continue;
+        list += "\n" + String(++number) + ". " + String(_modules[i].name);
+    }
+    return number == 0 ? "No modules recorded" : "Modules:" + list;
+}

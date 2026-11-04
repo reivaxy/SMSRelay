@@ -764,7 +764,10 @@ String WebManager::generateHomePage() {
     html += "        <div class=\"section sections-full sec-alerts\">\n";
     html += "            <div class=\"section-title\">Active Alerts</div>\n";
     html += generateAlertsHTML();
-    html += "            <button type=\"button\" id=\"clearAlertsBtn\" class=\"btn-danger\">Clear alerts</button>\n";
+    bool hasAlerts = _alertManager.hasPendingAlerts();
+    if (hasAlerts) {
+        html += "            <button type=\"button\" id=\"clearAlertsBtn\" class=\"btn-danger\">Clear alerts</button>\n";
+    }
     html += "        </div>\n";
 
     // Known devices (recorded from /api/ping)
@@ -816,7 +819,8 @@ String WebManager::generateHomePage() {
 
     html += "    <script>\n";
     html += "        const ACCESS_TOKEN = '" + _accessToken + "';\n";
-    html += "        document.getElementById('clearAlertsBtn').addEventListener('click', async function() {\n";
+    html += "        const clearAlertsBtn = document.getElementById('clearAlertsBtn');\n";
+    html += "        if (clearAlertsBtn) clearAlertsBtn.addEventListener('click', async function() {\n";
     html += "            if (!confirm('Clear all active alerts?')) return;\n";
     html += "            try {\n";
     html += "                const response = await fetch('/' + ACCESS_TOKEN + '/api/clearalerts', { method: 'POST' });\n";
@@ -1132,14 +1136,14 @@ String WebManager::generateRandomToken() {
 }
 
 String WebManager::generateAlertsHTML() {
-    String alertsContent = _alertManager.getPendingAlertsList();
     String html = "";
     
-    // Check if there are no alerts
-    if (alertsContent.indexOf("No pending alerts") >= 0) {
+    if (!_alertManager.hasPendingAlerts()) {
         html += "            <div class=\"no-alerts\">✓ No active alerts</div>\n";
         return html;
     }
+    
+    String alertsContent = _alertManager.getPendingAlertsList();
     
     // Parse the alerts list and format as HTML
     // The format is: "[CODE] TITLE (CAUSE) @ TIME [ACK:N]"

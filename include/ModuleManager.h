@@ -23,6 +23,7 @@ public:
         unsigned long timestamp;  // Local epoch time of last ping (0 if clock not set)
         bool      used;
         bool      failed;         // Last status check failed (alert already raised)
+        bool      alert;          // Last status reported module.alert == true
     };
 
     ModuleManager(ClockManager &clockManager, AlertManager &alertManager);

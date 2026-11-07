@@ -39,6 +39,7 @@ ModuleManager::ModuleManager(ClockManager &clockManager, AlertManager &alertMana
     for (size_t i = 0; i < MAX_MODULES; i++) {
         _modules[i].used = false;
         _modules[i].failed = false;
+        _modules[i].alert = false;
         _modules[i].name[0] = '\0';
         _modules[i].type[0] = '\0';
         _modules[i].timestamp = 0;
@@ -66,6 +67,7 @@ bool ModuleManager::registerModule(const IPAddress &ip, const String &name, cons
     }
     _modules[freeSlot].used = true;
     _modules[freeSlot].failed = false;
+    _modules[freeSlot].alert = false;
     _modules[freeSlot].ip = ip;
     strlcpy(_modules[freeSlot].name, name.c_str(), sizeof(_modules[freeSlot].name));
     strlcpy(_modules[freeSlot].type, type.c_str(), sizeof(_modules[freeSlot].type));
@@ -78,6 +80,7 @@ bool ModuleManager::removeModule(const IPAddress &ip) {
         if (_modules[i].used && _modules[i].ip == ip) {
             _modules[i].used = false;
             _modules[i].failed = false;
+            _modules[i].alert = false;
             _modules[i].name[0] = '\0';
             _modules[i].type[0] = '\0';
             _modules[i].timestamp = 0;
@@ -125,6 +128,20 @@ int ModuleManager::fetchModuleStatus(const IPAddress &ip, String &body) {
     }
     int code = response.substring(firstSpace + 1, firstSpace + 4).toInt();
     body = response.substring(headersEnd + 4);
+
+    // The "module" object carries a boolean "alert" flag shown in the module list
+    if (code == 200) {
+        JsonDocument doc;
+        if (!deserializeJson(doc, body)) {
+            bool alert = doc["module"]["alert"] | false;
+            for (size_t i = 0; i < MAX_MODULES; i++) {
+                if (_modules[i].used && _modules[i].ip == ip) {
+                    _modules[i].alert = alert;
+                    break;
+                }
+            }
+        }
+    }
     return code;
 }
 
@@ -206,6 +223,9 @@ String ModuleManager::generateModulesHTML() const {
         rows += "<td>" + htmlEscape(String(_modules[i].name));
         if (_modules[i].failed) {
             rows += " <span class=\"tag tag-high\">NO RESPONSE</span>";
+        }
+        if (_modules[i].alert) {
+            rows += " <span class=\"tag tag-high alert-tag\">ALERT</span>";
         }
         if (_modules[i].type[0] != '\0') {
             rows += "<br><span class=\"dev-type\">(" + htmlEscape(String(_modules[i].type)) + ")</span>";

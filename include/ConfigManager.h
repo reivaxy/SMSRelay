@@ -25,7 +25,8 @@ public:
         DST_OFFSET,              // Daylight Saving Time offset in seconds (int, 0 for winter, 3600 for +1hr, 7200 for +2hrs)
         SMS_SEND_DISABLED,       // SMS sending disabled for testing (int 0=enabled, 1=disabled)
         PUSHOVER_USER_TOKEN,     // Pushover service user token (string)
-        PUSHOVER_API_TOKEN       // Pushover service API token (string)
+        PUSHOVER_API_TOKEN,      // Pushover service API token (string)
+        AP_PASSWORD              // Fallback access point password (string, 8-63 chars; generated if unset)
     };
 
     // Default values

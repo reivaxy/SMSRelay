@@ -517,8 +517,13 @@ void SMSProcessor::handleWriteConfigCommand(const String &rest, const String &se
         }
         
         case ConfigManager::Param::WIFI_SSID:
-        case ConfigManager::Param::WIFI_PASSWORD: {
+        case ConfigManager::Param::WIFI_PASSWORD:
+        case ConfigManager::Param::AP_PASSWORD: {
             // String parameters (WiFi credentials)
+            if (param == ConfigManager::Param::AP_PASSWORD && (valueStr.length() < 8 || valueStr.length() > 63)) {
+                _sender.send(senderNumber, "ERROR: Access Point Password must be 8 to 63 characters");
+                return;
+            }
             _configManager.setStringParam(param, valueStr);
             log_i("[CMD] Set %s (length: %d)", ConfigManager::getParamName(param).c_str(), valueStr.length());
             confirmMsg = "OK: " + ConfigManager::getParamName(param) + " set (length: " + String(valueStr.length()) + ")";

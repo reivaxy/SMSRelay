@@ -18,6 +18,7 @@ class MainPowerCheck;
 class WebManager {
 public:
     static constexpr size_t MAX_HEADER_SIZE = 2048;
+    static constexpr const char *AP_SSID = "SMSRelay";
 
     WebManager(ConfigManager &configManager, SMSSender &sender, PhoneNumberManager &phoneNumberManager, AlertManager &alertManager, Modem &modem, ClockManager &clockManager,
                TemperatureHumidityProcessor &tempHumidityProcessor, BatteryProcessor &batteryProcessor, MainPowerCheck &mainPowerCheck);
@@ -59,6 +60,14 @@ private:
     // Send a complete HTTP response, then close the connection
     void sendResponse(WiFiClient &client, const String &status, const String &contentType, const String &body);
 
+    // Watch the home WiFi link: on loss, alert and serve the web interface from the embedded access point
+    void checkWiFiLink();
+    void startAccessPoint();
+    void stopAccessPoint();
+
+    // Access point password from preferences (generated and saved if not set)
+    String getAccessPointPassword();
+
     // Generate HTML form with all parameters
     String generatePageStart(const String &title, const String &heading);
     String generateHomePage();
@@ -91,4 +100,6 @@ private:
     String                   _serverURL;
     String                   _accessToken;
     ModuleManager            _moduleManager;
+    bool                     _apActive = false;      // Embedded access point is up because home WiFi was lost
+    unsigned long            _wifiLostSince = 0;     // millis() when the home WiFi link was first seen down (0 = link up)
 };

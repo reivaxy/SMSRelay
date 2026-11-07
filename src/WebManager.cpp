@@ -95,6 +95,12 @@ void WebManager::stop() {
         _server = nullptr;
     }
 
+    if (_apActive) {
+        WiFi.softAPdisconnect(true);
+        _apActive = false;
+    }
+    _wifiLostSince = 0;
+
     WiFi.disconnect(true);  // true = turn off WiFi radio
     _isRunning = false;
     log_i("[WEB] Web server stopped and WiFi disconnected");
@@ -121,6 +127,9 @@ void WebManager::check() {
         return;
     }
 
+    // Detect loss of the home WiFi and fall back to the embedded access point
+    checkWiFiLink();
+
     // Periodically check that the known modules still answer
     _moduleManager.check();
 
@@ -129,6 +138,81 @@ void WebManager::check() {
     if (client) {
         handleClient(client);
     }
+}
+
+void WebManager::checkWiFiLink() {
+    static constexpr unsigned long WIFI_LOST_DELAY_MS = 15000;  // Ignore short drops
+
+    if (WiFi.status() == WL_CONNECTED) {
+        _wifiLostSince = 0;
+        if (_apActive) {
+            stopAccessPoint();
+        }
+        return;
+    }
+
+    if (_apActive) {
+        // Another component (e.g. NTP resync) may have switched the radio back to STA only
+        if (!(WiFi.getMode() & WIFI_MODE_AP)) {
+            log_w("[WEB] Access point was switched off, restarting it");
+            startAccessPoint();
+        }
+        return;
+    }
+
+    if (_wifiLostSince == 0) {
+        _wifiLostSince = millis();
+        if (_wifiLostSince == 0) _wifiLostSince = 1;
+        log_w("[WEB] Home WiFi link lost");
+        return;
+    }
+
+    if (millis() - _wifiLostSince < WIFI_LOST_DELAY_MS) {
+        return;
+    }
+
+    log_w("[WEB] Home WiFi still down, opening access point");
+    startAccessPoint();
+
+    if (_apActive) {
+        String ssid = _configManager.getStringParam(ConfigManager::Param::WIFI_SSID);
+        _alertManager.sendAlert("WiFi lost",
+                                "Home WiFi '" + ssid + "' is down.\nAccess point: " + String(AP_SSID) +
+                                "\nPassword: " + getAccessPointPassword() + "\n" + _serverURL,
+                                "Home WiFi disconnected");
+    }
+}
+
+String WebManager::getAccessPointPassword() {
+    String password = _configManager.getStringParam(ConfigManager::Param::AP_PASSWORD);
+    if (password.length() < 8 || password.length() > 63) {
+        // Not set yet: generate a random WPA2 passphrase (10 chars) and persist it
+        password = generateRandomToken();
+        _configManager.setStringParam(ConfigManager::Param::AP_PASSWORD, password);
+    }
+    return password;
+}
+
+void WebManager::startAccessPoint() {
+    // Keep STA enabled so the ESP32 keeps trying to rejoin the home WiFi
+    WiFi.mode(WIFI_AP_STA);
+    if (!WiFi.softAP(AP_SSID, getAccessPointPassword().c_str())) {
+        log_e("[WEB] Failed to start access point");
+        return;
+    }
+
+    _apActive = true;
+    _serverURL = "http://" + WiFi.softAPIP().toString() + "/" + _accessToken + "/";
+    log_i("[WEB] Access point '%s' started. Web server at: %s", AP_SSID, _serverURL.c_str());
+}
+
+void WebManager::stopAccessPoint() {
+    WiFi.softAPdisconnect(true);
+    WiFi.mode(WIFI_STA);
+    _apActive = false;
+    _serverURL = "http://" + WiFi.localIP().toString() + "/" + _accessToken + "/";
+    log_i("[WEB] Home WiFi restored, access point stopped. Web server at: %s", _serverURL.c_str());
+    _alertManager.sendNotification("WiFi restored", "Home WiFi restored. Web interface: " + _serverURL);
 }
 
 void WebManager::handleClient(WiFiClient client) {
@@ -166,11 +250,13 @@ void WebManager::handleClient(WiFiClient client) {
 
     // Handle POST /api/ping (no access token required)
     // Body: {"IP":"<ip address>","name":"<device name>","type":"<device type>"} (name and type truncated to 11 chars)
+    // Response: {"name":"SmsRelay","ssid":"<fallback AP SSID>","password":"<fallback AP password>"}
     if (method == "POST" && path == "/api/ping") {
         String postBody = readRequestBody(client, request, 256);
 
         String status = "200 OK";
-        String response = "SmsRelay";
+        String contentType = "application/json";
+        String response;
         JsonDocument doc;
         DeserializationError err = deserializeJson(doc, postBody);
         String ipStr = doc["IP"] | "";
@@ -180,12 +266,19 @@ void WebManager::handleClient(WiFiClient client) {
         if (err || !peerIp.fromString(ipStr)) {
             log_w("[WEB] Invalid ping request");
             status = "400 Bad Request";
+            contentType = "text/plain";
             response = "Expected JSON with IP and name";
         } else {
             _moduleManager.registerModule(peerIp, name, type);
+
+            JsonDocument reply;
+            reply["name"] = "SmsRelay";
+            reply["ssid"] = AP_SSID;
+            reply["password"] = getAccessPointPassword();
+            serializeJson(reply, response);
         }
 
-        sendResponse(client, status, "text/plain", response);
+        sendResponse(client, status, contentType, response);
         return;
     }
 
@@ -490,6 +583,19 @@ String WebManager::handleFormSubmit(const String &postData) {
                     pos = ampPos + 1;
                     continue;
                 }
+                break;
+            }
+
+            case ConfigManager::Param::AP_PASSWORD: {
+                // WPA2 passphrase must be 8-63 characters; keep the current one otherwise
+                if (paramValue.length() < 8 || paramValue.length() > 63) {
+                    errorCount++;
+                    errors += "Access point password must be 8-63 characters; ";
+                    pos = ampPos + 1;
+                    continue;
+                }
+                _configManager.setStringParam(cfgParam, paramValue);
+                success = true;
                 break;
             }
 
@@ -928,6 +1034,20 @@ String WebManager::generateConfigPage() {
     html += "                    </div>\n";
     html += "                    <div class=\"form-group\">\n";
     html += "                        <label>Password: <input type=\"password\" name=\"WIFI_PWD\" placeholder=\"Leave empty to keep current\"></label>\n";
+    html += "                    </div>\n";
+    html += "                </div>\n";
+
+    // Fallback access point section (full width)
+    html += "                <div class=\"section sections-full\">\n";
+    html += "                    <div class=\"section-title\">Fallback Access Point</div>\n";
+    html += "                    <div class=\"form-group\">\n";
+    html += "                        <label>SSID: <input type=\"text\" value=\"" + String(AP_SSID) + "\" readonly></label>\n";
+    html += "                    </div>\n";
+    html += "                    <div class=\"form-group\">\n";
+    html += "                        <label>Password: <input type=\"text\" name=\"AP_PWD\" autocomplete=\"off\" minlength=\"8\" maxlength=\"63\" value=\"" + getAccessPointPassword() + "\"></label>\n";
+    html += "                    </div>\n";
+    html += "                    <div class=\"hint\">\n";
+    html += "                        Opened when the home WiFi is lost (8-63 characters)\n";
     html += "                    </div>\n";
     html += "                </div>\n";
 

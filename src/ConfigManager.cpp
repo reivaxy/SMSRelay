@@ -123,6 +123,7 @@ String ConfigManager::getParamKey(Param param) {
         case Param::SMS_SEND_DISABLED:       return "SMS_DISABLED";
         case Param::PUSHOVER_USER_TOKEN:     return "PUSHOVER_USER";
         case Param::PUSHOVER_API_TOKEN:      return "PUSHOVER_TOKEN";
+        case Param::AP_PASSWORD:             return "AP_PASS";
     }
     return "UNKNOWN";
 }
@@ -149,12 +150,13 @@ bool ConfigManager::parseParamName(const String &userInput, Param &outParam) {
     else if (input == "SMS_DISABLED" || input == "SMS_SEND_DISABLED") { outParam = Param::SMS_SEND_DISABLED; return true; }
     else if (input == "PUSHOVER_USER" || input == "PUSHOVER_USER_TOKEN") { outParam = Param::PUSHOVER_USER_TOKEN; return true; }
     else if (input == "PUSHOVER_TOKEN" || input == "PUSHOVER_API_TOKEN") { outParam = Param::PUSHOVER_API_TOKEN; return true; }
+    else if (input == "AP_PWD" || input == "AP_PASSWORD") { outParam = Param::AP_PASSWORD; return true; }
     
     return false;
 }
 
 String ConfigManager::getValidParamNames() {
-    return "TEMP_HIGH, TEMP_LOW, TEMP_OFFSET, HUMIDITY_HIGH, HUMIDITY_LOW, HUMIDITY_OFFSET, BAT_THRESHOLD, BAT_NEAR_EMPTY, POWER_THRESHOLD, RESEND_MINS, WIFI_SSID, WIFI_PWD, NTP_RESYNC_HRS, DST_OFFSET, SMS_DISABLED, PUSHOVER_USER, PUSHOVER_TOKEN";
+    return "TEMP_HIGH, TEMP_LOW, TEMP_OFFSET, HUMIDITY_HIGH, HUMIDITY_LOW, HUMIDITY_OFFSET, BAT_THRESHOLD, BAT_NEAR_EMPTY, POWER_THRESHOLD, RESEND_MINS, WIFI_SSID, WIFI_PWD, NTP_RESYNC_HRS, DST_OFFSET, SMS_DISABLED, PUSHOVER_USER, PUSHOVER_TOKEN, AP_PWD";
 }
 
 String ConfigManager::getParamName(Param param) {
@@ -176,6 +178,7 @@ String ConfigManager::getParamName(Param param) {
         case Param::SMS_SEND_DISABLED:       return "SMS Send Disabled";
         case Param::PUSHOVER_USER_TOKEN:     return "Pushover User Token";
         case Param::PUSHOVER_API_TOKEN:      return "Pushover API Token";
+        case Param::AP_PASSWORD:             return "Access Point Password";
     }
     return "Unknown";
 }
@@ -218,9 +221,9 @@ String ConfigManager::getParamInfo(Param param) {
     }
     
     // String parameters
-    if (param == Param::WIFI_SSID || param == Param::WIFI_PASSWORD) {
+    if (param == Param::WIFI_SSID || param == Param::WIFI_PASSWORD || param == Param::AP_PASSWORD) {
         String val = getStringParam(param);
-        if (param == Param::WIFI_PASSWORD) {
+        if (param == Param::WIFI_PASSWORD || param == Param::AP_PASSWORD) {
             return name + ": " + (val.length() > 0 ? "***" : "(not set)");
         } else {
             return name + ": " + (val.length() > 0 ? val : "(not set)");
@@ -259,6 +262,7 @@ String ConfigManager::getAllParams() {
     msg += getParamInfo(Param::ALERT_RESEND_DELAY_MINS) + "\n";
     msg += getParamInfo(Param::WIFI_SSID) + "\n";
     msg += getParamInfo(Param::WIFI_PASSWORD) + "\n";
+    msg += getParamInfo(Param::AP_PASSWORD) + "\n";
     msg += getParamInfo(Param::NTP_RESYNC_HOURS) + "\n";
     msg += getParamInfo(Param::DST_OFFSET) + "\n";
     msg += getParamInfo(Param::SMS_SEND_DISABLED);

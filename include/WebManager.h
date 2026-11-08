@@ -35,6 +35,9 @@ public:
     // Check if web server is currently running
     bool isRunning() const;
 
+    // True when the fallback access point is up
+    bool isApActive() const { return _apActive; }
+
     // Get the web server URL (only valid when server is running)
     String getServerURL() const;
 
@@ -102,4 +105,5 @@ private:
     ModuleManager            _moduleManager;
     bool                     _apActive = false;      // Embedded access point is up because home WiFi was lost
     unsigned long            _wifiLostSince = 0;     // millis() when the home WiFi link was first seen down (0 = link up)
+    unsigned long            _lastApRecheck = 0;     // millis() of the last home WiFi check while the AP is open
 };

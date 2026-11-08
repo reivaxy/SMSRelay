@@ -326,7 +326,12 @@ void ClockManager::check() {
             webManagerRunning = _webManager->isRunning();
         }
         
-        if (syncWithNTP(!webManagerRunning)) {
+        if (_webManager != nullptr && _webManager->isApActive()) {
+            log_i("[CLOCK] Fallback AP active, skipping NTP resync");
+            if (syncWithMobileNetwork()) {
+                _syncSource = SYNC_MOBILE;
+            }
+        } else if (syncWithNTP(!webManagerRunning)) {
             _syncSource = SYNC_NTP;
             log_i("[CLOCK] Successfully resynchronized with NTP");
         } else {

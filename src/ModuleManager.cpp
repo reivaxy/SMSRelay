@@ -90,6 +90,19 @@ bool ModuleManager::removeModule(const IPAddress &ip) {
     return false;
 }
 
+void ModuleManager::clear() {
+    for (size_t i = 0; i < MAX_MODULES; i++) {
+        _modules[i].used = false;
+        _modules[i].failed = false;
+        _modules[i].alert = false;
+        _modules[i].name[0] = '\0';
+        _modules[i].type[0] = '\0';
+        _modules[i].timestamp = 0;
+    }
+    _sweeping = false;
+    _sweepIndex = 0;
+}
+
 bool ModuleManager::isKnownModule(const IPAddress &ip) const {
     for (size_t i = 0; i < MAX_MODULES; i++) {
         if (_modules[i].used && _modules[i].ip == ip) {

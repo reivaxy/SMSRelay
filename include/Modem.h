@@ -118,7 +118,7 @@ private:
     TinyGsm _modem;
     bool _initialized = false;
     unsigned long _lastConnectionCheck = 0;
-    static const unsigned long CONNECTION_CHECK_INTERVAL = 10000;  // Check every 10 seconds
+    static const unsigned long CONNECTION_CHECK_INTERVAL = 30000;  // Check every 30 seconds
     static const unsigned long MODEM_POWERDOWN_TIME_MS = 1500;      // Time to hold PWRKEY for power-down
     static const unsigned long MODEM_STABILIZATION_DELAY_MS = 4000; // Extra delay after power-on for stability
 };

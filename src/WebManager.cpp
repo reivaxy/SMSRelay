@@ -142,6 +142,21 @@ void WebManager::check() {
 
 void WebManager::checkWiFiLink() {
     static constexpr unsigned long WIFI_LOST_DELAY_MS = 15000;  // Ignore short drops
+    static constexpr unsigned long AP_RECHECK_MS = 300000;       // Home WiFi check interval while the AP is open
+
+    if (_apActive) {
+        // Another component (e.g. NTP resync) may have switched the radio back to STA only
+        if (!(WiFi.getMode() & WIFI_MODE_AP)) {
+            log_w("[WEB] Access point was switched off, restarting it");
+            startAccessPoint();
+        }
+
+        // Check the home WiFi periodically while the AP is open
+        if (millis() - _lastApRecheck < AP_RECHECK_MS) {
+            return;
+        }
+        _lastApRecheck = millis();
+    }
 
     if (WiFi.status() == WL_CONNECTED) {
         _wifiLostSince = 0;
@@ -152,11 +167,6 @@ void WebManager::checkWiFiLink() {
     }
 
     if (_apActive) {
-        // Another component (e.g. NTP resync) may have switched the radio back to STA only
-        if (!(WiFi.getMode() & WIFI_MODE_AP)) {
-            log_w("[WEB] Access point was switched off, restarting it");
-            startAccessPoint();
-        }
         return;
     }
 
@@ -201,7 +211,11 @@ void WebManager::startAccessPoint() {
         return;
     }
 
+    if (!_apActive) {
+        _moduleManager.clear();  // Modules belong to the other network
+    }
     _apActive = true;
+    _lastApRecheck = millis();
     _serverURL = "http://" + WiFi.softAPIP().toString() + "/" + _accessToken + "/";
     log_i("[WEB] Access point '%s' started. Web server at: %s", AP_SSID, _serverURL.c_str());
 }
@@ -210,6 +224,7 @@ void WebManager::stopAccessPoint() {
     WiFi.softAPdisconnect(true);
     WiFi.mode(WIFI_STA);
     _apActive = false;
+    _moduleManager.clear();  // Modules belong to the other network
     _serverURL = "http://" + WiFi.localIP().toString() + "/" + _accessToken + "/";
     log_i("[WEB] Home WiFi restored, access point stopped. Web server at: %s", _serverURL.c_str());
     _alertManager.sendNotification("WiFi restored", "Home WiFi restored. Web interface: " + _serverURL);

@@ -35,6 +35,9 @@ public:
     // Remove a module from the table, returns false if the IP is unknown
     bool removeModule(const IPAddress &ip);
 
+    // Remove all modules from the table
+    void clear();
+
     // True if the IP is in the module table
     bool isKnownModule(const IPAddress &ip) const;
 

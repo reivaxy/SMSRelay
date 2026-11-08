@@ -72,7 +72,7 @@ private:
     String getAccessPointPassword();
 
     // Generate HTML form with all parameters
-    String generatePageStart(const String &title, const String &heading);
+    String generatePageStart(const String &title, const String &heading, bool settingsPage = false);
     String generateHomePage();
     String generateConfigPage();
 
@@ -106,4 +106,5 @@ private:
     bool                     _apActive = false;      // Embedded access point is up because home WiFi was lost
     unsigned long            _wifiLostSince = 0;     // millis() when the home WiFi link was first seen down (0 = link up)
     unsigned long            _lastApRecheck = 0;     // millis() of the last home WiFi check while the AP is open
+    unsigned long            _staAttemptStart = 0;   // millis() when the current home WiFi retry started (0 = none)
 };

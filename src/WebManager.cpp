@@ -142,7 +142,8 @@ void WebManager::check() {
 
 void WebManager::checkWiFiLink() {
     static constexpr unsigned long WIFI_LOST_DELAY_MS = 15000;  // Ignore short drops
-    static constexpr unsigned long AP_RECHECK_MS = 300000;       // Home WiFi check interval while the AP is open
+    static constexpr unsigned long AP_RECHECK_MS = 300000;       // Home WiFi retry interval while the AP is open
+    static constexpr unsigned long STA_ATTEMPT_MS = 15000;       // Duration of one home WiFi retry
 
     if (_apActive) {
         // Another component (e.g. NTP resync) may have switched the radio back to STA only
@@ -151,11 +152,33 @@ void WebManager::checkWiFiLink() {
             startAccessPoint();
         }
 
-        // Check the home WiFi periodically while the AP is open
-        if (millis() - _lastApRecheck < AP_RECHECK_MS) {
+        if (WiFi.status() != WL_CONNECTED) {
+            if (_staAttemptStart != 0) {
+                // A retry is in progress: give it a few seconds, then stop the STA scanning again
+                if (millis() - _staAttemptStart < STA_ATTEMPT_MS) {
+                    return;
+                }
+                log_i("[WEB] Home WiFi retry failed, waiting before next attempt");
+                WiFi.disconnect(false);
+                _staAttemptStart = 0;
+                return;
+            }
+
+            // Retry the home WiFi only periodically while the AP is open
+            if (millis() - _lastApRecheck < AP_RECHECK_MS) {
+                return;
+            }
+            _lastApRecheck = millis();
+            String ssid = _configManager.getStringParam(ConfigManager::Param::WIFI_SSID);
+            String password = _configManager.getStringParam(ConfigManager::Param::WIFI_PASSWORD);
+            log_i("[WEB] Retrying home WiFi: %s", ssid.c_str());
+            WiFi.setAutoReconnect(false);
+            WiFi.begin(ssid.c_str(), password.c_str());
+            _staAttemptStart = millis();
+            if (_staAttemptStart == 0) _staAttemptStart = 1;
             return;
         }
-        _lastApRecheck = millis();
+        _staAttemptStart = 0;
     }
 
     if (WiFi.status() == WL_CONNECTED) {
@@ -204,12 +227,16 @@ String WebManager::getAccessPointPassword() {
 }
 
 void WebManager::startAccessPoint() {
-    // Keep STA enabled so the ESP32 keeps trying to rejoin the home WiFi
+    // Keep STA enabled (AP_STA) but stop its automatic reconnection: the continuous scanning
+    // spams the log and disturbs the AP. checkWiFiLink() retries the home WiFi periodically.
     WiFi.mode(WIFI_AP_STA);
     if (!WiFi.softAP(AP_SSID, getAccessPointPassword().c_str())) {
         log_e("[WEB] Failed to start access point");
         return;
     }
+    WiFi.setAutoReconnect(false);
+    WiFi.disconnect(false);
+    _staAttemptStart = 0;
 
     if (!_apActive) {
         _moduleManager.clear();  // Modules belong to the other network
@@ -223,7 +250,9 @@ void WebManager::startAccessPoint() {
 void WebManager::stopAccessPoint() {
     WiFi.softAPdisconnect(true);
     WiFi.mode(WIFI_STA);
+    WiFi.setAutoReconnect(true);
     _apActive = false;
+    _staAttemptStart = 0;
     _moduleManager.clear();  // Modules belong to the other network
     _serverURL = "http://" + WiFi.localIP().toString() + "/" + _accessToken + "/";
     log_i("[WEB] Home WiFi restored, access point stopped. Web server at: %s", _serverURL.c_str());
@@ -726,9 +755,9 @@ static const char PAGE_STYLE[] = R"css(
 
         button { width: 100%; padding: 8px; background: #007bff; color: white; border: none; border-radius: 4px; font-size: 14px; cursor: pointer; margin-top: 10px; }
         button:hover { background: #0056b3; }
-        a.btn { display: block; text-align: center; padding: 8px; margin-top: 10px; background: #007bff; color: white; border-radius: 4px; font-size: 14px; }
-        a.btn:hover { background: #0056b3; }
-        a.back { display: block; text-align: center; padding: 6px; margin-bottom: 8px; font-size: 13px; }
+        .nav { text-align: center; font-size: 14px; margin-bottom: 8px; }
+        .nav a, .nav span { display: inline-block; margin: 0 10px; padding: 2px 4px; }
+        .nav span { font-weight: bold; color: #333; }
         a.btn-sm { display: inline-block; margin: 0; padding: 2px 8px; font-size: 12px; }
         button.btn-sm { width: auto; margin: 0; padding: 2px 8px; font-size: 12px; }
         button.btn-warn { background: #ff9800; }
@@ -743,7 +772,7 @@ static const char PAGE_STYLE[] = R"css(
 )css";
 
 // Common page start: head, styles, title, date/time and revision
-String WebManager::generatePageStart(const String &title, const String &heading) {
+String WebManager::generatePageStart(const String &title, const String &heading, bool settingsPage) {
     String html = "";
     html += "<!DOCTYPE html>\n";
     html += "<html>\n<head>\n";
@@ -755,6 +784,17 @@ String WebManager::generatePageStart(const String &title, const String &heading)
     html += "</head>\n<body>\n";
     html += "    <div class=\"container\">\n";
     html += "        <h1>" + heading + "</h1>\n";
+
+    // Navigation: the link of the current page is displayed as plain text
+    html += "        <div class=\"nav\">\n";
+    if (settingsPage) {
+        html += "            <a href=\"/" + _accessToken + "/\">Home</a>\n";
+        html += "            <span>Settings</span>\n";
+    } else {
+        html += "            <span>Home</span>\n";
+        html += "            <a href=\"/" + _accessToken + "/config\">Settings</a>\n";
+    }
+    html += "        </div>\n";
     
     // Display current date/time from ClockManager
     String dateTime = _clockManager.getFormattedDateTime();
@@ -828,7 +868,6 @@ String WebManager::generateHomePage() {
     }
     html += "        </div>\n";
     
-    html += "        <a class=\"btn\" href=\"/" + _accessToken + "/config\">Configuration</a>\n";
     html += "        <div id=\"status\" class=\"status\"></div>\n";
     html += "    </div>\n";
 
@@ -963,9 +1002,8 @@ String WebManager::generateHomePage() {
 
 String WebManager::generateConfigPage() {
     // Build HTML with current parameter values from ConfigManager
-    String html = generatePageStart("SMS Relay Configuration", "Configuration");
+    String html = generatePageStart("SMS Relay Settings", "Settings", true);
 
-    html += "        <a class=\"back\" href=\"/" + _accessToken + "/\">&larr; Back to status</a>\n";
     html += "        <form id=\"configForm\" data-token=\"" + _accessToken + "\">\n";
     html += "        <script>const ACCESS_TOKEN = '" + _accessToken + "';</script>\n";
     

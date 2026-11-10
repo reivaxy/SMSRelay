@@ -24,7 +24,7 @@ class PushoverNotifier;
 //   "CONFIG" - get all parameters and their current values
 //   "LISTPHONES" - list all authorized phone numbers
 //   "LISTMODULES" - list known module names
-//   "MODULESTATUS <number>" - get raw status JSON for a module
+//   "MODULESTATUS <number>" - get alert messages for a module
 //   "CLEAR" - reset all alert SMS sent flags
 //   "HELP" - display list of available commands
 //   "NOTIF <message>" - send a push notification via Pushover

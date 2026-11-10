@@ -108,7 +108,7 @@ Serial console now accepts all the messages that can be sent by SMS, it has ROOT
 - **`LEVELS`** - Show current sensor readings (temperature, humidity, battery level, power status) with threshold indicators
 - **`LISTPHONES`** - List all authorized phone numbers with their permission levels and mute status
 - **`LISTMODULES`** - List known modules by number
-- **`MODULESTATUS <number>`** - Return the raw status JSON for the numbered module
+- **`MODULESTATUS <number>`** - Return the alert messages of the numbered module ("No alert" if none)
 - **`LISTALERTS`** - Show all pending alerts with their 3-digit codes and acknowledgment status
 - **`CLEAR`** - Clear all pending alerts
 - **`ACK <code>`** - Acknowledge an alert by its 3-digit code

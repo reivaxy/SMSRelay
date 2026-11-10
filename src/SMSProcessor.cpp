@@ -10,6 +10,7 @@
 #include "Modem.h"
 #include "PushoverNotifier.h"
 #include "utilities.h"
+#include <ArduinoJson.h>
 
 SMSProcessor::SMSProcessor(SMSSender &sender, const String &targetNumber, SMSReader &reader, 
                            MainPowerCheck &mainPowerCheck, BatteryProcessor &batteryProcessor, TemperatureHumidityProcessor &tempHumidityProcessor,
@@ -690,7 +691,21 @@ void SMSProcessor::handleModuleStatusCommand(const String &rest, const String &s
     String body;
     int code = _webManager.fetchModuleStatusByNumber(number, body);
     if (code == 200) {
-        _sender.send(senderNumber, body);
+        JsonDocument doc;
+        String reply = "No alert";
+        if (!deserializeJson(doc, body) && (doc["module"]["alert"] | false)) {
+            String messages;
+            JsonObject module = doc["module"].as<JsonObject>();
+            for (JsonPair kv : module) {
+                if (!kv.value().is<JsonObject>()) continue;
+                const char *msg = kv.value()["alertMsg"] | "";
+                if (msg[0] == '\0') continue;
+                if (messages.length() > 0) messages += "\n";
+                messages += msg;
+            }
+            if (messages.length() > 0) reply = messages;
+        }
+        _sender.send(senderNumber, reply);
     } else if (code == -3) {
         _sender.send(senderNumber, "ERROR: No module at that number");
     } else {
@@ -719,7 +734,7 @@ void SMSProcessor::handleHelpCommand(const String &senderNumber) {
     helpMsg1 += "CONFIG - View params\n";
     helpMsg1 += "LISTPHONES - List phones\n";
     helpMsg1 += "LISTMODULES - List modules\n";
-    helpMsg1 += "MODULESTATUS <i> - Module status JSON\n";
+    helpMsg1 += "MODULESTATUS <i> - Module alert messages\n";
     helpMsg1 += "LISTALERTS - List pending alerts\n";
     helpMsg1 += "CLEAR - Reset alerts\n";
     helpMsg1 += "ACK <code> - Acknowledge alert\n";

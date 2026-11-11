@@ -1,17 +1,17 @@
 # SMS relay
 
 This is a key element on an new WIP aquarium monitoring system, this subsystem is in charge of warning in case 
-of main power failure, in which case the home wifi is no longer available to send alerts.
+of main power failure, in which case the home wifi is no longer available to send alerts. It will then send text messages and push notifications through 4G.
 
 Thanks to a DHT22 sensor, it also monitors room temperature and humidity and can send alerts when configurable thresholds are reached. This was really useful during 2026 heatwave, some aquariums needed extra cooling.
 
 Years ago I designed an [arduino based device wich was doing that](https://github.com/reivaxy/aquaMonitor) that sent 
 text message for various alerts, including main power outage, and I noticed it would occasionaly receive text messages 
 from the mobile provider that I would never read, so this new device will forward them to your own mobile, and then 
-adds a few features. This device no longer works since 2G networks have been discontinued.
+adds a few features. The old device no longer works since 2G networks have been discontinued.
 
-Using a LILYGO T-A7670E R2 board with a nano sim with its own phone number, this program will forward to your phone 
-any SMS it receives, preceded by a message saying what number sent it.
+Using a LILYGO T-A7670E R2 4G LTE board with a nano sim with its own phone number and a 1.5€ per month plan, this program forwards to my phone 
+any SMS it receives, preceded by a message saying what number sent it, and it sends alerts.
 
 <img width="601" height="610" alt="image" src="https://github.com/user-attachments/assets/b6f5bb17-422f-488b-9362-95136565b258" />
 
@@ -31,11 +31,12 @@ and you can answer from your phone as if it were from the number it was sent to.
 <img width="420" alt="side2" src="https://github.com/reivaxy/SMSRelay/blob/main/res/side2.jpg" />
 
 
-Other devices can use this device to send alerts by SMS and push notifications (light issues, water level or temperature issues, ...)
+Other devices can use this device to send alerts by SMS and push notifications (light issues, water level or temperature issues, ...) thanks to
+a REST api, using either the home wifi from my box, or a custom access point opened when home wifi is no longer available.
 
-The first implementation is an aquarium monitoring device: https://github.com/reivaxy/IOTAgents/tree/AquaMonitor
+The first implementation of such modules is an aquarium monitoring device: https://github.com/reivaxy/IOTAgents/tree/AquaMonitor
 
-Such devices connect to the SMSRelay, whose home page list them and provide access to their own home page, status, etc.
+Devices connect to the SMSRelay, whose home page list them and provides access to their own home page, status, etc.
 
 Home page:
 
@@ -183,3 +184,9 @@ Serial console now accepts all the messages that can be sent by SMS, it has ROOT
     - Provides a secure web form to adjust all configuration parameters, including Pushover tokens
   - **`WEB OFF`** - Stop the web server and disconnect from WiFi
 
+## Security
+When I'm not home I only access these devices through my VPN.
+
+The webserver opened by this device uses a different token each time it's turned on, which is only sent to the admin phone 
+number through text message, but I still prefer it to not be reachable directly from the outside. Same for OTA, it's triggered by
+a text message and needs another random token, sent in response, to be provided when uploading.

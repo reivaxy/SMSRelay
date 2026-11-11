@@ -300,8 +300,7 @@ String OTAManager::generateUploadPage() {
             <strong>Instructions:</strong><br>
             1. Select a compiled firmware binary file (.bin)<br>
             2. Click 'Upload and Update'<br>
-            3. The device will restart automatically<br>
-            4. WiFi will be disabled after update
+            3. The device will restart automatically<br> 
         </div>
 
         <form id='uploadForm' enctype='multipart/form-data'>

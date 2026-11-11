@@ -5,8 +5,6 @@ of main power failure, in which case the home wifi is no longer available to sen
 
 Thanks to a DHT22 sensor, it also monitors room temperature and humidity and can send alerts when configurable thresholds are reached. This was really useful during 2026 heatwave, some aquariums needed extra cooling.
 
-Other devices, each monitoring one aquarium, will ultimately also use this device to send alerts by SMS and push notifications (light issues, water level or temperature issues, ...)
-
 Years ago I designed an [arduino based device wich was doing that](https://github.com/reivaxy/aquaMonitor) that sent 
 text message for various alerts, including main power outage, and I noticed it would occasionaly receive text messages 
 from the mobile provider that I would never read, so this new device will forward them to your own mobile, and then 
@@ -26,11 +24,22 @@ This allows you to not miss any message in case your SMS enabled home automation
 (from the provider, or because you are repurposing an old SIM card, or whatever mischief you are about to commit), 
 and you can answer from your phone as if it were from the number it was sent to.
 
-<img width="640" alt="20260704_224349" src="https://github.com/user-attachments/assets/f83f52b9-f4e3-4f4d-83e1-af1621c59c79" />
+<img width="640" alt="open" src="https://github.com/reivaxy/SMSRelay/blob/master/res/open.jpg" />
 
-<img width="640" alt="20260704_224537" src="https://github.com/user-attachments/assets/70c265e7-7f4f-4f9d-907a-d6ea2a1e5ec1" />
+<img width="640" alt="side1" src="https://github.com/reivaxy/SMSRelay/blob/master/res/side1.jpg" />
 
-<img width="640" alt="20260704_224424" src="https://github.com/user-attachments/assets/f2654b39-9969-45a1-8fff-09fa51c9b593" />
+<img width="640" alt="side2" src="https://github.com/reivaxy/SMSRelay/blob/master/res/side2.jpg" />
+
+
+Other devices can use this device to send alerts by SMS and push notifications (light issues, water level or temperature issues, ...)
+
+Such devices connect to the SMSRelay, whose home page list them and provide access to their own home page, status, etc.
+
+<img width="640" alt="side2" src="https://github.com/reivaxy/SMSRelay/blob/master/res/home.jpg" />
+
+
+The first implementation is an aquarium monitoring device: https://github.com/reivaxy/IOTAgents/tree/AquaMonitor
+
 
 ## Features
 
@@ -153,9 +162,11 @@ Serial console now accepts all the messages that can be sent by SMS, it has ROOT
 #### System Management
 - **`OTA`** - Initiate Over-The-Air (OTA) firmware update mode
   - Connects to configured WiFi and starts a web server
-  - Sends you the upload URL via SMS
-  - Allows uploading new firmware without serial connection
+  - Sends you the upload URL including a security random token via SMS
+  - Allows uploading new firmware without serial connection, checking the security token
   - Cannot be initiated if there are pending unacknowledged alerts
+
+  <img width="640" alt="OTA" src="https://github.com/reivaxy/SMSRelay/blob/master/res/ota.jpg" />
   
 - **`RESTART`** - Restart the device
   

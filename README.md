@@ -24,18 +24,18 @@ This allows you to not miss any message in case your SMS enabled home automation
 (from the provider, or because you are repurposing an old SIM card, or whatever mischief you are about to commit), 
 and you can answer from your phone as if it were from the number it was sent to.
 
-<img width="640" alt="open" src="https://github.com/reivaxy/SMSRelay/blob/master/res/open.jpg" />
+<img width="640" alt="open" src="https://github.com/reivaxy/SMSRelay/blob/main/res/open.jpg" />
 
-<img width="640" alt="side1" src="https://github.com/reivaxy/SMSRelay/blob/master/res/side1.jpg" />
+<img width="640" alt="side1" src="https://github.com/reivaxy/SMSRelay/blob/main/res/side1.jpg" />
 
-<img width="640" alt="side2" src="https://github.com/reivaxy/SMSRelay/blob/master/res/side2.jpg" />
+<img width="640" alt="side2" src="https://github.com/reivaxy/SMSRelay/blob/main/res/side2.jpg" />
 
 
 Other devices can use this device to send alerts by SMS and push notifications (light issues, water level or temperature issues, ...)
 
 Such devices connect to the SMSRelay, whose home page list them and provide access to their own home page, status, etc.
 
-<img width="640" alt="side2" src="https://github.com/reivaxy/SMSRelay/blob/master/res/home.jpg" />
+<img width="640" alt="side2" src="https://github.com/reivaxy/SMSRelay/blob/main/res/home.jpg" />
 
 
 The first implementation is an aquarium monitoring device: https://github.com/reivaxy/IOTAgents/tree/AquaMonitor
@@ -166,7 +166,7 @@ Serial console now accepts all the messages that can be sent by SMS, it has ROOT
   - Allows uploading new firmware without serial connection, checking the security token
   - Cannot be initiated if there are pending unacknowledged alerts
 
-  <img width="640" alt="OTA" src="https://github.com/reivaxy/SMSRelay/blob/master/res/ota.jpg" />
+  <img width="640" alt="OTA" src="https://github.com/reivaxy/SMSRelay/blob/main/res/ota.jpg" />
   
 - **`RESTART`** - Restart the device
   

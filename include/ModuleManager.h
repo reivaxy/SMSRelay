@@ -18,6 +18,7 @@ public:
 
     struct Module {
         IPAddress ip;
+        char      mac[18];         // Stable identity, uppercase colon-separated MAC
         char      name[NAME_LEN + 1];
         char      type[TYPE_LEN + 1];
         unsigned long timestamp;  // Local epoch time of last ping (0 if clock not set)
@@ -28,12 +29,14 @@ public:
 
     ModuleManager(ClockManager &clockManager, AlertManager &alertManager);
 
-    // Store the module IP, name and type, or update name/type/timestamp if the IP is already known
-    // Returns false if the table is full and the IP is new
-    bool registerModule(const IPAddress &ip, const String &name, const String &type);
+    // Canonical MAC address, or an empty string if invalid
+    static String normalizeMac(const String &mac);
 
-    // Remove a module from the table, returns false if the IP is unknown
-    bool removeModule(const IPAddress &ip);
+    // Update an existing MAC's IP/status, or add a new module; false if invalid/full
+    bool registerModule(const IPAddress &ip, const String &mac, const String &name, const String &type, bool alert);
+
+    // Remove a module by its stable MAC identity
+    bool removeModule(const String &mac);
 
     // Remove all modules from the table
     void clear();

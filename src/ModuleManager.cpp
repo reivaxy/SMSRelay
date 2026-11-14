@@ -46,11 +46,33 @@ ModuleManager::ModuleManager(ClockManager &clockManager, AlertManager &alertMana
     }
 }
 
-bool ModuleManager::registerModule(const IPAddress &ip, const String &name, const String &type) {
+String ModuleManager::normalizeMac(const String &mac) {
+    String normalized = mac;
+    normalized.trim();
+    normalized.toUpperCase();
+    if (normalized.length() != 17) return "";
+    for (unsigned int i = 0; i < normalized.length(); i++) {
+        char c = normalized[i];
+        if (i % 3 == 2) {
+            if (c != ':' && c != '-') return "";
+            normalized[i] = ':';
+        } else if (!((c >= '0' && c <= '9') || (c >= 'A' && c <= 'F'))) {
+            return "";
+        }
+    }
+    if (normalized == "00:00:00:00:00:00" || normalized == "FF:FF:FF:FF:FF:FF") return "";
+    return normalized;
+}
+
+bool ModuleManager::registerModule(const IPAddress &ip, const String &mac, const String &name, const String &type, bool alert) {
+    String normalizedMac = normalizeMac(mac);
+    if (normalizedMac.length() == 0) return false;
     int freeSlot = -1;
     unsigned long now = _clockManager.isInitialized() ? _clockManager.getCurrentTime() : 0;
     for (size_t i = 0; i < MAX_MODULES; i++) {
-        if (_modules[i].used && _modules[i].ip == ip) {
+        if (_modules[i].used && normalizedMac == _modules[i].mac) {
+            _modules[i].ip = ip;
+            _modules[i].alert = alert;
             strlcpy(_modules[i].name, name.c_str(), sizeof(_modules[i].name));
             strlcpy(_modules[i].type, type.c_str(), sizeof(_modules[i].type));
             _modules[i].timestamp = now;
@@ -67,17 +89,20 @@ bool ModuleManager::registerModule(const IPAddress &ip, const String &name, cons
     }
     _modules[freeSlot].used = true;
     _modules[freeSlot].failed = false;
-    _modules[freeSlot].alert = false;
+    _modules[freeSlot].alert = alert;
     _modules[freeSlot].ip = ip;
+    strlcpy(_modules[freeSlot].mac, normalizedMac.c_str(), sizeof(_modules[freeSlot].mac));
     strlcpy(_modules[freeSlot].name, name.c_str(), sizeof(_modules[freeSlot].name));
     strlcpy(_modules[freeSlot].type, type.c_str(), sizeof(_modules[freeSlot].type));
     _modules[freeSlot].timestamp = now;
     return true;
 }
 
-bool ModuleManager::removeModule(const IPAddress &ip) {
+bool ModuleManager::removeModule(const String &mac) {
+    String normalizedMac = normalizeMac(mac);
+    if (normalizedMac.length() == 0) return false;
     for (size_t i = 0; i < MAX_MODULES; i++) {
-        if (_modules[i].used && _modules[i].ip == ip) {
+        if (_modules[i].used && normalizedMac == _modules[i].mac) {
             _modules[i].used = false;
             _modules[i].failed = false;
             _modules[i].alert = false;
@@ -243,13 +268,14 @@ String ModuleManager::generateModulesHTML() const {
         if (_modules[i].type[0] != '\0') {
             rows += "<br><span class=\"dev-type\">(" + htmlEscape(String(_modules[i].type)) + ")</span>";
         }
+        rows += "<br><span class=\"dev-type\">" + String(_modules[i].mac) + "</span>";
         rows += "</td>";
         String lastPing = formatTimestamp(_modules[i].timestamp);
         lastPing.replace(" ", "<br>");  // date on the first line, time on the second
         rows += "<td>" + lastPing + "</td>";
         rows += "<td><a class=\"btn btn-sm\" href=\"http://" + ip + "/\" target=\"_blank\" rel=\"noopener\">home</a></td>";
         rows += "<td><button type=\"button\" class=\"btn-sm status-btn\" data-ip=\"" + ip + "\">status</button></td>";
-        rows += "<td><button type=\"button\" class=\"btn-sm btn-danger remove-btn\" data-ip=\"" + ip + "\" data-name=\"" + htmlEscape(String(_modules[i].name)) + "\">X</button></td>";
+        rows += "<td><button type=\"button\" class=\"btn-sm btn-danger remove-btn\" data-mac=\"" + String(_modules[i].mac) + "\" data-name=\"" + htmlEscape(String(_modules[i].name)) + "\">X</button></td>";
         rows += "</tr>\n";
     }
     if (rows.length() == 0) {

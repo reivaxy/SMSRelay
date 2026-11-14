@@ -308,28 +308,31 @@ void WebManager::handleClient(WiFiClient client) {
     }
 
     // Handle POST /api/ping (no access token required)
-    // Body: {"IP":"<ip address>","name":"<device name>","type":"<device type>"} (name and type truncated to 11 chars)
+    // Body: module /api/status payload, including IP, MAC, name, type and module.alert
     // Response: {"name":"SmsRelay","ssid":"<fallback AP SSID>","password":"<fallback AP password>"}
     if (method == "POST" && path == "/api/ping") {
-        String postBody = readRequestBody(client, request, 256);
+        String postBody = readRequestBody(client, request, 4096);
 
         String status = "200 OK";
         String contentType = "application/json";
         String response;
         JsonDocument doc;
         DeserializationError err = deserializeJson(doc, postBody);
-        String ipStr = doc["IP"] | "";
+        String ipStr = doc["IP"] | doc["ip"] | "";
+        String mac = ModuleManager::normalizeMac(doc["MAC"] | doc["mac"] | "");
         String name = doc["name"] | "";
         String type = doc["type"] | "";
         IPAddress peerIp;
-        if (err || !peerIp.fromString(ipStr)) {
+        if (err || !peerIp.fromString(ipStr) || mac.length() == 0) {
             log_w("[WEB] Invalid ping request");
             status = "400 Bad Request";
             contentType = "text/plain";
-            response = "Expected JSON with IP and name";
+            response = "Expected status JSON with valid IP and MAC";
+        } else if (!_moduleManager.registerModule(peerIp, mac, name, type, doc["module"]["alert"] | false)) {
+            status = "503 Service Unavailable";
+            contentType = "text/plain";
+            response = "Module table full";
         } else {
-            _moduleManager.registerModule(peerIp, name, type);
-
             JsonDocument reply;
             reply["name"] = "SmsRelay";
             reply["ssid"] = AP_SSID;
@@ -445,16 +448,17 @@ void WebManager::handleClient(WiFiClient client) {
         sendResponse(client, "200 OK", "application/json", response);
         log_i("[WEB] ACK response sent");
     }
-    // Handle POST /api/removepeer: forget a known device (body: ip=<address>)
+    // Handle POST /api/removepeer: forget a known device (body: mac=<address>)
     else if (method == "POST" && routePath == "/api/removepeer") {
         String postBody = readRequestBody(client, request, 128);
-        IPAddress peerIp;
-        int ipPos = postBody.indexOf("ip=");
-        String ipStr = (ipPos >= 0) ? postBody.substring(ipPos + 3) : String("");
-        int ampPos = ipStr.indexOf('&');
-        if (ampPos >= 0) ipStr = ipStr.substring(0, ampPos);
+        int macPos = postBody.indexOf("mac=");
+        String mac = (macPos >= 0) ? postBody.substring(macPos + 4) : String("");
+        int ampPos = mac.indexOf('&');
+        if (ampPos >= 0) mac = mac.substring(0, ampPos);
+        mac.replace("%3A", ":");
+        mac.replace("%3a", ":");
 
-        if (peerIp.fromString(ipStr) && _moduleManager.removeModule(peerIp)) {
+        if (_moduleManager.removeModule(mac)) {
             sendResponse(client, "200 OK", "application/json", "{\"status\":\"ok\"}");
         } else {
             sendResponse(client, "404 Not Found", "application/json", "{\"status\":\"error\",\"message\":\"Unknown device\"}");
@@ -949,11 +953,11 @@ String WebManager::generateHomePage() {
     html += "        // Known devices: confirm, then remove a device from the list\n";
     html += "        document.querySelectorAll('.remove-btn').forEach(btn => {\n";
     html += "            btn.addEventListener('click', async function() {\n";
-    html += "                const ip = this.getAttribute('data-ip');\n";
+    html += "                const mac = this.getAttribute('data-mac');\n";
     html += "                const name = this.getAttribute('data-name');\n";
-    html += "                if (!confirm('Remove ' + (name || ip) + ' from the list?')) return;\n";
+    html += "                if (!confirm('Remove ' + (name || mac) + ' from the list?')) return;\n";
     html += "                const params = new URLSearchParams();\n";
-    html += "                params.append('ip', ip);\n";
+    html += "                params.append('mac', mac);\n";
     html += "                try {\n";
     html += "                    const response = await fetch('/' + ACCESS_TOKEN + '/api/removepeer', {\n";
     html += "                        method: 'POST',\n";

@@ -39,6 +39,15 @@ The first implementation of such modules is an aquarium monitoring device: https
 
 Devices connect to the SMSRelay, whose home page list them and provides access to their own home page, status, etc.
 
+Modules POST their status JSON to `/api/ping`, including `IP`, `MAC`, `name`, `type`,
+and the `module.alert` flag (lowercase `ip` and `mac` are also accepted). The payload
+may be up to 4096 bytes. Modules are identified by their MAC address, so a later
+ping with the same MAC updates the existing entry's IP address, name, type, alert
+state and last-ping time instead of adding a duplicate. MAC addresses are normalized
+to uppercase colon-separated form; missing or invalid MAC addresses are rejected
+with HTTP 400. A full module table returns HTTP 503 for a new module.
+The ping response still provides the relay name and fallback access-point credentials.
+
 Home page:
 
 <img width="420" alt="side2" src="https://github.com/reivaxy/SMSRelay/blob/main/res/home.jpg" />

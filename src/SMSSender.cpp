@@ -34,6 +34,16 @@ bool SMSSender::needsUCS2(const String &utf8)
     return false;
 }
 
+bool SMSSender::sendAlert(const String &number, const String &text)
+{
+    if (number != "CONSOLE" && _configManager.getInt(ConfigManager::Param::SMS_SEND_DISABLED)) {
+        log_i("[SMS] SMS alerts are DISABLED - logging only: to %s", number.c_str());
+        log_i("[SMS] Message (%d chars): %s", text.length(), text.c_str());
+        return true;  // Suppressed intentionally, not a modem failure.
+    }
+    return send(number, text);
+}
+
 bool SMSSender::send(const String &number, const String &text)
 {
     // Special case: CONSOLE sender should print to Serial, not send SMS
@@ -52,13 +62,6 @@ bool SMSSender::send(const String &number, const String &text)
             Serial.println(text.substring(startIdx));
         }
         return true;
-    }
-
-    // Check if SMS sending is disabled
-    if (_configManager.getInt(ConfigManager::Param::SMS_SEND_DISABLED)) {
-        log_i("[SMS] SMS sending is DISABLED - logging only: to %s", number.c_str());
-        log_i("[SMS] Message (%d chars): %s", text.length(), text.c_str());
-        return true;  // Return true to indicate "success" (message logged but not sent)
     }
 
     // Enable extended error reporting before sending any SMS

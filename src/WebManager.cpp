@@ -230,7 +230,8 @@ void WebManager::startAccessPoint() {
     // Keep STA enabled (AP_STA) but stop its automatic reconnection: the continuous scanning
     // spams the log and disturbs the AP. checkWiFiLink() retries the home WiFi periodically.
     WiFi.mode(WIFI_AP_STA);
-    if (!WiFi.softAP(AP_SSID, getAccessPointPassword().c_str())) {
+    // Keep channel 1 and the SSID visible; allow up to 10 connected devices.
+    if (!WiFi.softAP(AP_SSID, getAccessPointPassword().c_str(), 1, 0, 10)) {
         log_e("[WEB] Failed to start access point");
         return;
     }
@@ -1064,7 +1065,7 @@ String WebManager::generateConfigPage() {
     html += "                    </div>\n";
     html += "                    <div class=\"form-group check-row\">\n";
     html += "                        <input type=\"checkbox\" id=\"SMS_DISABLED\" name=\"SMS_DISABLED\" value=\"1\" " + (String(_configManager.getInt(ConfigManager::Param::SMS_SEND_DISABLED)) == "1" ? String("checked") : String("")) + ">\n";
-    html += "                        <label for=\"SMS_DISABLED\">Disable SMS notifications</label>\n";
+    html += "                        <label for=\"SMS_DISABLED\">Disable SMS alerts (command replies stay enabled)</label>\n";
     html += "                    </div>\n";
     html += "                </div>\n";
 

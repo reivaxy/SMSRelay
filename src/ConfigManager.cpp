@@ -175,7 +175,7 @@ String ConfigManager::getParamName(Param param) {
         case Param::WIFI_PASSWORD:           return "WiFi Password";
         case Param::NTP_RESYNC_HOURS:        return "NTP Resync Interval (hours)";
         case Param::DST_OFFSET:              return "DST Offset (seconds)";
-        case Param::SMS_SEND_DISABLED:       return "SMS Send Disabled";
+        case Param::SMS_SEND_DISABLED:       return "SMS Alerts Disabled";
         case Param::PUSHOVER_USER_TOKEN:     return "Pushover User Token";
         case Param::PUSHOVER_API_TOKEN:      return "Pushover API Token";
         case Param::AP_PASSWORD:             return "Access Point Password";

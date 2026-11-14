@@ -10,8 +10,13 @@ class SMSSender {
 public:
     SMSSender(TinyGsm &modem, Stream &serialAT, ConfigManager &configManager);
 
-    // Send a UTF-8 message. Automatically selects IRA or UCS-2 path.
+    // Send a reply or forwarded message, regardless of SMS_SEND_DISABLED.
+    // Automatically selects IRA or UCS-2 path.
     bool send(const String &number, const String &text);
+
+    // Send an automatic alert/notification, respecting SMS_SEND_DISABLED.
+    // Disabled alerts are logged and treated as successfully handled.
+    bool sendAlert(const String &number, const String &text);
 
     // Encode a UTF-8 string to hex UCS-2 (4 uppercase hex chars per code unit).
     static String utf8ToUCS2Hex(const String &utf8);

@@ -87,7 +87,7 @@ void AlertManager::sendNotification(const String &title, const String &message) 
             continue;
         }
 
-        if (_sender.send(entry.number, message)) {
+        if (_sender.sendAlert(entry.number, message)) {
             log_i("[NOTIFY] Notification '%s' sent to %s", title.c_str(), entry.number.c_str());
         } else {
             log_w("[NOTIFY] Failed to send notification '%s' to %s", title.c_str(), entry.number.c_str());
@@ -128,7 +128,7 @@ void AlertManager::sendAlertToAll(Alert &alert) {
             continue;
         }
         
-        if (_sender.send(entry.number, message)) {
+        if (_sender.sendAlert(entry.number, message)) {
             sentCount++;
             log_i("[ALERT] Alert %s sent to %s", alert.code.c_str(), entry.number.c_str());
         } else {
@@ -195,7 +195,7 @@ void AlertManager::notifyACKToOthers(const Alert &alert, const String &ackSender
             continue;
         }
         
-        if (_sender.send(entry.number, notifyMessage)) {
+        if (_sender.sendAlert(entry.number, notifyMessage)) {
             sentCount++;
             log_i("[ALERT] ACK notification sent to %s", entry.number.c_str());
         } else {

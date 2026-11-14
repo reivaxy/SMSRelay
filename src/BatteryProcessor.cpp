@@ -22,7 +22,7 @@ void BatteryProcessor::check()
             auto numbers = _phoneNumberManager.getAllNumbers();
             for (const auto &entry : numbers) {
                 if (!_phoneNumberManager.isMuted(entry.number)) {
-                    if (_sender.send(entry.number, msg)) {
+                    if (_sender.sendAlert(entry.number, msg)) {
                         log_i("[OK] Battery near empty SMS sent to %s", entry.number.c_str());
                     } else {
                         log_i("[ERROR] Failed to send battery near empty SMS to %s", entry.number.c_str());
@@ -39,7 +39,7 @@ void BatteryProcessor::check()
             auto numbers = _phoneNumberManager.getAllNumbers();
             for (const auto &entry : numbers) {
                 if (!_phoneNumberManager.isMuted(entry.number)) {
-                    if (_sender.send(entry.number, msg)) {
+                    if (_sender.sendAlert(entry.number, msg)) {
                         log_i("[OK] Battery alert SMS sent to %s", entry.number.c_str());
                     } else {
                         log_i("[ERROR] Failed to send battery alert SMS to %s", entry.number.c_str());
@@ -54,7 +54,7 @@ void BatteryProcessor::check()
         } else if (_lastAlertADC - adcValue >= 20) {
             // Use this to find out the best value for BAT_ADC_NEAR_EMPTY_THRESHOLD
             // log_i("Battery level dropped (ADC=%d, last alert ADC=%d), sending SMS...", adcValue, _lastAlertADC);
-            // if (_sender.send(_targetNumber, "Battery level dropped (ADC=" + String(adcValue) + ")")) {
+            // if (_sender.sendAlert(_targetNumber, "Battery level dropped (ADC=" + String(adcValue) + ")")) {
             //     log_i("[OK] Battery drop SMS sent successfully");
             //     _lastAlertADC = adcValue;
             // } else {
@@ -68,7 +68,7 @@ void BatteryProcessor::check()
             auto numbers = _phoneNumberManager.getAllNumbers();
             for (const auto &entry : numbers) {
                 if (!_phoneNumberManager.isMuted(entry.number)) {
-                    if (_sender.send(entry.number, msg)) {
+                    if (_sender.sendAlert(entry.number, msg)) {
                         log_i("[OK] USB alert SMS sent to %s", entry.number.c_str());
                     } else {
                         log_i("[ERROR] Failed to send USB alert SMS to %s", entry.number.c_str());

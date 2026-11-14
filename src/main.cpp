@@ -102,7 +102,7 @@ void loop()
         #endif
         
         for (const auto &entry : phoneNumberManager.getAllNumbers()) {
-            if (sender.send(entry.number, powerOnMsg)) {
+            if (sender.sendAlert(entry.number, powerOnMsg)) {
                 log_i("[OK] Power-on SMS sent to %s", entry.number.c_str());
             } else {
                 log_i("[ERROR] Failed to send power-on SMS to %s", entry.number.c_str());

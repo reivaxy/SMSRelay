@@ -33,6 +33,7 @@ and you can answer from your phone as if it were from the number it was sent to.
 
 Other devices can use this device to send alerts by SMS and push notifications (light issues, water level or temperature issues, ...) thanks to
 a REST api, using either the home wifi from my box, or a custom access point opened when home wifi is no longer available.
+The fallback access point supports up to 10 simultaneously connected devices.
 
 The first implementation of such modules is an aquarium monitoring device: https://github.com/reivaxy/IOTAgents/tree/AquaMonitor
 
@@ -67,6 +68,10 @@ them to send commands
 - **Automatic Resending**: Alerts automatically resend at configurable intervals (default: 5 minutes) until 
 acknowledged by all authorized users
 - **Alert Clearing**: Alerts can be manually cleared.
+- **Disable SMS Alerts**: `CONFIG SMS_DISABLED 1` disables automatic SMS alerts and notifications
+ (including resends, ACK broadcasts, battery/power changes, and startup messages), but incoming SMS
+ commands still receive replies and SMS forwarding still works. Pushover is unaffected.
+ Use `CONFIG SMS_DISABLED 0` to re-enable SMS alerts.
 
 ### Push Notifications (Pushover)
 - **Pushover Integration**: In addition to SMS, alerts and notifications can be pushed to your phone through the

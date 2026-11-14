@@ -10,6 +10,14 @@
 #include "MainPowerCheck.h"
 #include <ArduinoJson.h>
 
+// SMS envelope and cellular signal bars, kept in firmware (no filesystem needed).
+static const char FAVICON_SVG[] = R"svg(<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+<rect width="32" height="32" rx="7" fill="#0f172a"/>
+<g fill="#38bdf8"><rect x="18" y="8" width="3" height="4" rx="1"/><rect x="22" y="5" width="3" height="7" rx="1"/><rect x="26" y="2" width="3" height="10" rx="1"/></g>
+<rect x="4" y="14" width="24" height="14" rx="3" fill="#f8fafc"/>
+<path d="m6 16 10 7 10-7" fill="none" stroke="#0284c7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>)svg";
+
 WebManager::WebManager(ConfigManager &configManager, SMSSender &sender, PhoneNumberManager &phoneNumberManager, AlertManager &alertManager, Modem &modem, ClockManager &clockManager,
                        TemperatureHumidityProcessor &tempHumidityProcessor, BatteryProcessor &batteryProcessor, MainPowerCheck &mainPowerCheck)
     : _server(nullptr), _configManager(configManager), _sender(sender), _phoneNumberManager(phoneNumberManager), _alertManager(alertManager), _modem(modem), _clockManager(clockManager),
@@ -292,6 +300,12 @@ void WebManager::handleClient(WiFiClient client) {
     }
 
     log_i("[WEB] %s %s", method.c_str(), path.c_str());
+
+    // Browsers request this public asset outside the token-protected page path.
+    if (method == "GET" && path == "/favicon.ico") {
+        sendResponse(client, "200 OK", "image/svg+xml", FAVICON_SVG);
+        return;
+    }
 
     // Handle POST /api/ping (no access token required)
     // Body: {"IP":"<ip address>","name":"<device name>","type":"<device type>"} (name and type truncated to 11 chars)
@@ -779,6 +793,7 @@ String WebManager::generatePageStart(const String &title, const String &heading,
     html += "<html>\n<head>\n";
     html += "    <title>" + title + "</title>\n";
     html += "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n";
+    html += "    <link rel=\"icon\" type=\"image/svg+xml\" sizes=\"any\" href=\"/favicon.ico\">\n";
     html += "    <style>";
     html += PAGE_STYLE;
     html += "    </style>\n";

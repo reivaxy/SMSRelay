@@ -243,6 +243,12 @@ void SMSProcessor::handleStatusCommand(const String &senderNumber)
     String mainStatus = (mainAdcValue >= powerAdcThreshold) ? "OK" : "LOW";
     statusMsg += "Main Power: " + String(mainAdcValue) + " (" + mainStatus + ")";
 
+    bool homeWiFiConnected = (WiFi.status() == WL_CONNECTED);
+    String ssid = homeWiFiConnected ? WiFi.SSID() : String(WebManager::AP_SSID);
+    IPAddress ip = homeWiFiConnected ? WiFi.localIP() : WiFi.softAPIP();
+    statusMsg += "\nSSID: " + ssid;
+    statusMsg += "\nIP: " + ip.toString();
+
     if (senderNumber != "CONSOLE") {
         log_i("[CMD] %s", statusMsg.c_str());
     }

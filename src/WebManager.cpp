@@ -341,6 +341,10 @@ void WebManager::handleClient(WiFiClient client) {
         }
 
         sendResponse(client, status, contentType, response);
+        // Acknowledge the ping before potentially slow SMS/Pushover delivery.
+        if (status == "200 OK") {
+            _moduleManager.reportModuleAlerts(mac, doc.as<JsonObjectConst>());
+        }
         return;
     }
 

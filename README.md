@@ -47,6 +47,20 @@ state and last-ping time instead of adding a duplicate. MAC addresses are normal
 to uppercase colon-separated form; missing or invalid MAC addresses are rejected
 with HTTP 400. A full module table returns HTTP 503 for a new module.
 The ping response still provides the relay name and fallback access-point credentials.
+When `module.alert` is true, the relay reports the nested `alertMsg` messages via
+SMS and Pushover, using the same notification delivery as `/api/alerte`. Unchanged
+messages are not reported again on each ping. A clear status re-arms reporting,
+and changed alert messages are reported immediately. Fetched statuses use the same
+handling. An alert without message details is reported with a generic message.
+
+Every 60 seconds, the relay scans the module list. Only modules whose last successful
+update is more than 5 minutes 30 seconds old are queried at `/api/status`. A valid
+response with the matching MAC refreshes the entry and its last-update time; failure
+raises the module-disconnected alert once per outage. A later ping or successful
+status request re-arms this detection. After the first failed check, disconnected
+modules are retried no more often than every 5 minutes during the regular scans.
+Age checks use uptime, so clock synchronization
+does not affect them. This also works on the fallback access point.
 
 Home page:
 

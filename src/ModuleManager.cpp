@@ -43,6 +43,8 @@ ModuleManager::ModuleManager(ClockManager &clockManager, AlertManager &alertMana
         _modules[i].name[0] = '\0';
         _modules[i].type[0] = '\0';
         _modules[i].timestamp = 0;
+        _modules[i].lastUpdateMs = 0;
+        _modules[i].lastCheckMs = 0;
     }
 }
 
@@ -76,6 +78,7 @@ bool ModuleManager::registerModule(const IPAddress &ip, const String &mac, const
             strlcpy(_modules[i].name, name.c_str(), sizeof(_modules[i].name));
             strlcpy(_modules[i].type, type.c_str(), sizeof(_modules[i].type));
             _modules[i].timestamp = now;
+            _modules[i].lastUpdateMs = millis();
             _modules[i].failed = false;  // A ping proves the module is alive; re-arms the outage alert
             return true;
         }
@@ -95,7 +98,39 @@ bool ModuleManager::registerModule(const IPAddress &ip, const String &mac, const
     strlcpy(_modules[freeSlot].name, name.c_str(), sizeof(_modules[freeSlot].name));
     strlcpy(_modules[freeSlot].type, type.c_str(), sizeof(_modules[freeSlot].type));
     _modules[freeSlot].timestamp = now;
+    _modules[freeSlot].lastUpdateMs = millis();
+    _modules[freeSlot].lastCheckMs = 0;
+    _modules[freeSlot].reportedAlerts = "";
     return true;
+}
+
+void ModuleManager::reportModuleAlerts(const String &mac, JsonObjectConst status) {
+    String normalizedMac = normalizeMac(mac);
+    for (size_t i = 0; i < MAX_MODULES; i++) {
+        Module &mod = _modules[i];
+        if (!mod.used || normalizedMac != mod.mac) continue;
+
+        JsonObjectConst module = status["module"].as<JsonObjectConst>();
+        String messages;
+        if (module["alert"] | false) {
+            for (JsonPairConst entry : module) {
+                if (!entry.value().is<JsonObjectConst>()) continue;
+                const char *message = entry.value()["alertMsg"] | "";
+                if (message[0] == '\0') continue;
+                if (messages.length() > 0) messages += "\n";
+                messages += message;
+            }
+            if (messages.length() == 0) messages = "Module reports an alert";
+        }
+
+        if (messages == mod.reportedAlerts) return;
+        mod.reportedAlerts = messages;
+        if (messages.length() > 0) {
+            String label = mod.name[0] != '\0' ? String(mod.name) : String(mod.mac);
+            _alertManager.sendNotification("Alert " + label, "Alert " + label + ": " + messages);
+        }
+        return;
+    }
 }
 
 bool ModuleManager::removeModule(const String &mac) {
@@ -167,16 +202,24 @@ int ModuleManager::fetchModuleStatus(const IPAddress &ip, String &body) {
     int code = response.substring(firstSpace + 1, firstSpace + 4).toInt();
     body = response.substring(headersEnd + 4);
 
-    // The "module" object carries a boolean "alert" flag shown in the module list
+    // Only a valid status for the expected MAC proves this module is still alive.
     if (code == 200) {
         JsonDocument doc;
-        if (!deserializeJson(doc, body)) {
-            bool alert = doc["module"]["alert"] | false;
-            for (size_t i = 0; i < MAX_MODULES; i++) {
-                if (_modules[i].used && _modules[i].ip == ip) {
-                    _modules[i].alert = alert;
-                    break;
-                }
+        if (deserializeJson(doc, body) || !doc.is<JsonObject>()) {
+            return -4;
+        }
+        String mac = normalizeMac(doc["MAC"] | doc["mac"] | "");
+        for (size_t i = 0; i < MAX_MODULES; i++) {
+            if (_modules[i].used && _modules[i].ip == ip) {
+                if (mac != _modules[i].mac) return -4;
+                IPAddress updatedIp = ip;
+                String ipStr = doc["IP"] | doc["ip"] | "";
+                if (ipStr.length() > 0 && !updatedIp.fromString(ipStr)) return -4;
+                String name = doc["name"] | _modules[i].name;
+                String type = doc["type"] | _modules[i].type;
+                registerModule(updatedIp, mac, name, type, doc["module"]["alert"] | false);
+                reportModuleAlerts(mac, doc.as<JsonObjectConst>());
+                break;
             }
         }
     }
@@ -199,7 +242,8 @@ int ModuleManager::fetchModuleStatusByNumber(int number, String &body) {
 }
 
 void ModuleManager::check() {
-    if (WiFi.status() != WL_CONNECTED) {
+    // Modules remain reachable through the fallback AP when home WiFi is down.
+    if (WiFi.status() != WL_CONNECTED && !(WiFi.getMode() & WIFI_MODE_AP)) {
         return;
     }
 
@@ -210,7 +254,7 @@ void ModuleManager::check() {
         _sweeping = true;
         _sweepIndex = 0;
         _lastSweep = millis();
-        log_i("[MODULES] Starting module status check loop");
+        log_i("[MODULES] Starting stale module check loop");
     }
 
     // Next used slot of the current sweep
@@ -223,21 +267,20 @@ void ModuleManager::check() {
     }
 
     Module &mod = _modules[_sweepIndex++];
+    if (millis() - mod.lastUpdateMs <= STALE_AFTER_MS) {
+        return;
+    }
+    if (mod.failed && millis() - mod.lastCheckMs < DISCONNECTED_RETRY_MS) {
+        return;
+    }
+    mod.lastCheckMs = millis();
     String body;
     log_i("[MODULES] Checking %s (%s)", mod.name, mod.ip.toString().c_str());
     int code = fetchModuleStatus(mod.ip, body);
     log_i("[MODULES] %s (%s) check result: code %d", mod.name, mod.ip.toString().c_str(), code);
 
     if (code == 200) {
-        mod.failed = false;
-        JsonDocument doc;
-        if (!deserializeJson(doc, body)) {
-            const char *name = doc["name"] | "";
-            if (name[0] != '\0' && strncmp(mod.name, name, sizeof(mod.name) - 1) != 0) {
-                log_i("[MODULES] %s: name updated '%s' -> '%s'", mod.ip.toString().c_str(), mod.name, name);
-                strlcpy(mod.name, name, sizeof(mod.name));
-            }
-        }
+        // fetchModuleStatus() refreshed the entry and re-armed its outage alert.
         return;
     }
 
@@ -282,7 +325,7 @@ String ModuleManager::generateModulesHTML() const {
         return "            <div class=\"empty\">No devices recorded</div>\n";
     }
     String html = "            <table class=\"devices\">\n";
-    html += "                <tr><th>Name</th><th>Last ping</th><th>Home</th><th>Status</th><th>Remove</th></tr>\n";
+    html += "                <tr><th>Name</th><th>Last update</th><th>Home</th><th>Status</th><th>Remove</th></tr>\n";
     html += rows;
     html += "            </table>\n";
     html += "            <dialog id=\"statusDialog\">\n";
